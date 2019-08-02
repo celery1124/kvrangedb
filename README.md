@@ -11,10 +11,28 @@ Provide a leveldb like interface with:
 
 # Build Test example
 
-## build
+## build Samsung KVSSD
+
+### build emulator (environment without actual device)
 
 ```bash
-	export PRJ_HOME=./
+	# build kvapi library
+	export PRJ_HOME=$(pwd)
+	export KVSSD_HOME=$PRJ_HOME/KVSSD-1.2.0/PDK/core
+	$KVSSD_HOME/tools/install_deps.sh # install kvapi dependency
+	mkdir $KVSSD_HOME/build
+	cd $KVSSD_HOME/build
+	cmake -DWITH_EMU=ON $KVSSD_HOME
+	make -j4
+
+	# copy libkvapi.so
+	cp $KVSSD_HOME/build/libkvapi.so $PRJ_HOME/libs/
+```
+
+## build test case
+
+```bash
+	export PRJ_HOME=$(pwd)
 	cd $PRJ_HOME/leveldb
 	make
 	cp out-shared/libleveldb.so* $PRJ_HOME/libs/
