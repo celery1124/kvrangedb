@@ -42,7 +42,13 @@ Provide a leveldb like interface with:
 ```
 
 ## run
+
+Note: please keep the kvssd_emul.conf file in the executable file directory. This configuration file override the default configuration by disabling the iops model (run faster).
+
 ```bash
+	export PRJ_HOME=$(pwd)
+	cd $PRJ_HOME/test
+	export LD_LIBRARY_PATH=$PRJ_HOME/libs/
 	./db_test
 ```
 
