@@ -29,13 +29,16 @@ Provide a leveldb like interface with:
 	cp $KVSSD_HOME/build/libkvapi.so $PRJ_HOME/libs/
 ```
 
+## build kvrangedb library
+
+```bash
+	make
+```
+
 ## build test case
 
 ```bash
 	export PRJ_HOME=$(pwd)
-	cd $PRJ_HOME/leveldb
-	make
-	cp out-shared/libleveldb.so* $PRJ_HOME/libs/
 	cd $PRJ_HOME/test
 	make lsm # lsm index
 	make btree # btree index
