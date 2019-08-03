@@ -57,7 +57,9 @@ Note: please keep the kvssd_emul.conf file in the executable file directory. Thi
 
 # TODO
 
-Enhance building system
+<del>Enhance building system</del>
+
+Use environment variable to load different code configurations
 
 LSM Tree:
 1. merge code for range filter and value 

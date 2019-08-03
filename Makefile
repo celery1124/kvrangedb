@@ -1,7 +1,7 @@
 # (A) Optimized mode
-#OPT ?= -O2 -DNDEBUG
+ OPT ?= -O2 -DNDEBUG
 # (B) Debug mode
- OPT ?= -g2
+# OPT ?= -g2
 
 TARGET=libkvrangedb.so
 
@@ -31,4 +31,4 @@ shared:
 
 clean:
 	make -C $(HOME)/src/leveldb/ clean
-	rm -rf $(HOME)/libs/$(TARGET) $(HOME)/libs/libleveldb.so*
+	rm -rf $(HOME)/libs/$(TARGET) $(HOME)/libs/libkvssd.so $(HOME)/libs/libleveldb.so*
