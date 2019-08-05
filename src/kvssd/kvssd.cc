@@ -4,6 +4,47 @@
 
 namespace kvssd {
 
+  void on_io_complete(kvs_callback_context* ioctx) {
+    if (ioctx->result != 0 && ioctx->result != KVS_ERR_KEY_NOT_EXIST) {
+      printf("io error: op = %d, key = %s, result = 0x%x, err = %s\n", ioctx->opcode, ioctx->key ? (char*)ioctx->key->key:0, ioctx->result, kvs_errstr(ioctx->result));
+      exit(1);
+    }
+    
+    switch (ioctx->opcode) {
+    case IOCB_ASYNC_PUT_CMD : {
+      void (*callback_put) (void *) = (void (*)(void *))ioctx->private1;
+      void *args_put = (void *)ioctx->private2;
+      if (callback_put != NULL) {
+        callback_put((void *)args_put);
+      }
+      break;
+    }
+    // case IOCB_ASYNC_GET_CMD : {
+    //   void (*callback_get) (void *) = (void (*)(void *))ioctx->private1;
+    //   Async_get_context *args_get = (Async_get_context *)ioctx->private2;
+    //   args_get->vbuf = (char*) ioctx->value->value;
+    //   args_get->actual_len = ioctx->value->actual_value_size;
+    //   if (callback_get != NULL) {
+    //     callback_get((void *)args_get->args);
+    //   }
+    //   break;
+    // }
+    // case IOCB_ASYNC_DEL_CMD : {
+    //   void (*callback_del) (void *) = (void (*)(void *))ioctx->private1;
+    //   void *args_del = (void *)ioctx->private2;
+    //   if (callback_del != NULL) {
+    //     callback_del((void *)args_del);
+    //   }
+    //   break;
+    // }
+    default : {
+      printf("aio cmd error \n");
+      break;
+    }
+    }
+    return;
+  }
+
   struct iterator_info{
     kvs_iterator_handle iter_handle;
     kvs_iterator_list iter_list;
@@ -48,6 +89,23 @@ namespace kvssd {
         exit(1);
     }
     //printf("[kv_store] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
+    return ret;
+  }
+
+  kvs_result KVSSD::kv_store_async(Slice *key, Slice *val, void (*callback)(void *), void *args) {
+    kvs_store_option option;
+    option.st_type = KVS_STORE_POST;
+    option.kvs_store_compress = false;
+
+    const kvs_store_context put_ctx = {option, (void *)callback, (void *)args};
+    const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size()};
+    const kvs_value kvsvalue = { (void *)val->data(), val->size(), 0, 0 /*offset */};
+    kvs_result ret = kvs_store_tuple_async(cont_handle, &kvskey, &kvsvalue, &put_ctx, on_io_complete);
+
+    if (ret != KVS_SUCCESS) {
+        printf("kv_store_async error %s\n", kvs_errstr(ret));
+        exit(1);
+    }
     return ret;
   }
   // (not support in device)

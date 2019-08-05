@@ -48,6 +48,7 @@ namespace kvssd {
       bool kv_exist (const Slice *key);
       uint32_t kv_get_size(const Slice *key);
       kvs_result kv_store(const Slice *key, const Slice *val);
+      kvs_result kv_store_async(Slice *key, Slice *val, void (*callback)(void *), void *args);
       kvs_result kv_append(const Slice *key, const Slice *val);
       // caller must free vbuf memory
       kvs_result kv_get(const Slice *key, char*& vbuf, int& vlen);
