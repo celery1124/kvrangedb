@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include "kvrangedb/iterator.h"
 #include "kvrangedb/options.h"
+#include "kvrangedb/status.h"
 
 namespace kvrangedb {
 

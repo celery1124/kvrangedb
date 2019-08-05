@@ -3,7 +3,8 @@
 * 07/23/2019
 * by Mian Qin
 */
-
+#include <mutex>
+#include <condition_variable>
 #include "kvrangedb/db.h"
 #include "kvrangedb/iterator.h"
 #include "db_impl.h"
@@ -46,6 +47,31 @@ Slice DBIterator::value() {
   return Slice(value_);
 }
 
+// Monitor for async I/O
+class Monitor {
+public:
+  std::mutex mtx_;
+  std::condition_variable cv_;
+  bool ready_ ;
+  Monitor() : ready_(false) {}
+  ~Monitor(){}
+  void reset() {ready_ = false;};
+  void notify() {
+    std::unique_lock<std::mutex> lck(mtx_);
+    ready_ = true;
+    cv_.notify_one();
+  }
+  void wait() {
+    std::unique_lock<std::mutex> lck(mtx_);
+    while (!ready_) cv_.wait(lck);
+  }
+};
+
+static void on_io_complete(void *args) {
+    Monitor *mon = (Monitor *)args;
+    mon->notify();
+}
+
 DBImpl::DBImpl(const Options& options, const std::string& dbname) {
   kvd_ = new kvssd::KVSSD(dbname.c_str());
   if (options.indexType == LSM)
@@ -68,8 +94,11 @@ Status DBImpl::Put(const WriteOptions& options,
                      const Slice& value) {
   kvssd::Slice put_key(key.data(), key.size());
   kvssd::Slice put_val(value.data(), value.size());
-  kvd_->kv_store(&put_key, &put_val);
+  Monitor mon;
+  kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
   key_idx_->Put(key);
+
+  mon.wait(); // wait data I/O done
   return Status();
 }
 
@@ -109,6 +138,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
 
   DB *db = new DBImpl(options, dbname);
   *dbptr = db;
+  return Status(Status::OK());
 }
 
 }  // namespace kvrangedb

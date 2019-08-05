@@ -44,12 +44,10 @@ struct Options {
 
 // Options that control read operations
 struct ReadOptions {
-  const Slice* lower_key;
   const Slice* upper_key;
 
   ReadOptions()
-      : lower_key(NULL),
-        upper_key(NULL) {
+      : upper_key(NULL) {
   }
 };
 
