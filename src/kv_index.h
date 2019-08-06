@@ -99,6 +99,7 @@ class KVIndex {
 
 KVIndex* NewLSMIndex(const Options& options, kvssd::KVSSD* kvd);
 KVIndex* NewBTreeIndex(const Options& options, kvssd::KVSSD* kvd);
+KVIndex* NewBaseIndex(const Options& options, kvssd::KVSSD* kvd);
 
 }  // namespace kvrangedb
 

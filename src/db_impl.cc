@@ -78,6 +78,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname) {
 	  key_idx_ = NewLSMIndex(options, kvd_);
   else if (options.indexType == BTREE)
     key_idx_ = NewBTreeIndex(options, kvd_);
+  else if (options.indexType == BASE) {
+    key_idx_ = NewBaseIndex(options, kvd_);
+  }
   else {
     printf("WRONG KV INDEX TYPE\n");
     exit(-1);

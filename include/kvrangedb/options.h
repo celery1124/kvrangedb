@@ -18,7 +18,8 @@ class Slice;
 
 enum IndexType {
   LSM,
-  BTREE
+  BTREE,
+  BASE
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
