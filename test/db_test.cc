@@ -144,6 +144,23 @@ void RandomSeek(kvrangedb::DB *db, int num) {
 
 }
 
+void DoScan(kvrangedb::DB *db, int scan_len) {
+  kvrangedb::ReadOptions rdopts;
+  Random rand(2019);
+  kvrangedb::Iterator* iter = db->NewIterator(rdopts);
+  
+  iter->SeekToFirst();
+  int i = 0;
+  while(iter->Valid() && scan_len > 0) {
+    kvrangedb::Slice val = iter->value();
+    printf("#%d, Get key %s, value %s\n", ++i, iter->key().ToString().c_str(), std::string(val.data(), 8).c_str());
+
+    iter->Next();
+    scan_len--;
+  }
+  delete iter;
+}
+
 class CustomComparator : public kvrangedb::Comparator {
 public:
   CustomComparator() {}
@@ -178,6 +195,7 @@ int main () {
   DoWrite(db, num, 0);
   RandomRead(db, num);
   RandomSeek(db, 10);
+  DoScan(db, 10);
 
   delete db;
 
