@@ -7,7 +7,7 @@ This project aims at supporting range queries on KVSSD by storing a secondary or
 Provide a leveldb like interface with:
 1. Custom comparator
 2. Batch update
-3. Iterator for range query
+3. Iterator for range query (**currently only support forward iterator**)
 
 # Build Test example
 
@@ -46,6 +46,14 @@ Provide a leveldb like interface with:
 
 ## run
 
+Configure DB options by environment: (please refer to include/kvrangedb/options.h)
+```bash
+	export INDEX_TYPE=LSM # LSM, BTREE, BASE
+	export PREFETCH_ENA=TRUE # TRUE, FALSE
+	export PREFETCH_PREFETCH_DEPTH=16 # any integer
+	export RANGE_FILTER_ENA=TRUE # TRUE, FALSE
+```
+
 Note: please keep the kvssd_emul.conf file in the executable file directory. This configuration file override the default configuration by disabling the iops model (run faster).
 
 ```bash
@@ -59,11 +67,13 @@ Note: please keep the kvssd_emul.conf file in the executable file directory. Thi
 
 <del>Enhance building system</del>
 
-Use environment variable to load different code configurations
+<del>Use environment variable to load different code configurations<del>
+
+Optimize value prefetch (when to prefetch, seperate thread for issuing I/O)
 
 LSM Tree:
 1. merge code for range filter and value 
-2. prefetch (currently only baseline)
+2. <del>prefetch (currently only baseline)</del>
 
 B Tree:
 1. implement delete
