@@ -1,5 +1,5 @@
 /******* kvrangedb *******/
-/* db.h
+/* db_impl.h
 * 07/23/2019
 * by Mian Qin
 */
@@ -15,6 +15,26 @@
 #include "kv_index.h"
 
 namespace kvrangedb {
+
+// Monitor for async I/O
+class Monitor {
+public:
+  std::mutex mtx_;
+  std::condition_variable cv_;
+  bool ready_ ;
+  Monitor() : ready_(false) {}
+  ~Monitor(){}
+  void reset() {ready_ = false;};
+  void notify() {
+    std::unique_lock<std::mutex> lck(mtx_);
+    ready_ = true;
+    cv_.notify_one();
+  }
+  void wait() {
+    std::unique_lock<std::mutex> lck(mtx_);
+    while (!ready_) cv_.wait(lck);
+  }
+};
 
 class DBImpl : public DB{
 friend class DBIterator;
