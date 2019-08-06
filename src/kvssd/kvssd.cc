@@ -231,7 +231,6 @@ namespace kvssd {
     kvs_iterator_context iter_ctx_open;
     iter_ctx_open.option = iter_info->g_iter_mode;
     iter_ctx_open.bitmask = 0x00000000;
-    unsigned int PREFIX_KV = 0;
 
     iter_ctx_open.bit_pattern = 0x00000000;
     iter_ctx_open.private1 = NULL;

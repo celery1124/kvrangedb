@@ -11,5 +11,8 @@ lsm:
 btree:
 	$(CC) db_test.cc -o db_test $(INCLUDES) $(LIBS) $(CXXFLAG_DBG) -DKVINDEX_BTREE
 
+base:
+	$(CC) db_test.cc -o db_test $(INCLUDES) $(LIBS) $(CXXFLAG_DBG) -DKVINDEX_BASE
+
 clean:
 	rm -rf db_test

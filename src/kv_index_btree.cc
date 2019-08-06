@@ -105,7 +105,7 @@ bool KVIndexBTree::Put(const Slice &key) {
 }
 
 bool KVIndexBTree::Delete(const Slice &key) {
-  // NOT IMPLEMENTED
+  // NOT IMPLEMENT
 }
 
 bool KVIndexBTree::Write(IDXWriteBatch* updates) {

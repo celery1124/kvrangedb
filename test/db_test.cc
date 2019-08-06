@@ -165,7 +165,11 @@ int main () {
   #ifdef KVINDEX_BTREE
   options.indexType = kvrangedb::BTREE;
   #else
+    #ifdef KVINDEX_BASE
+  options.indexType = kvrangedb::BASE;
+    #else
   options.indexType = kvrangedb::LSM; // default
+    #endif
   #endif
 #endif
   kvrangedb::DB *db = NULL;

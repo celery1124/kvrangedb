@@ -1874,7 +1874,7 @@ class ModelDB: public DB {
   }
   virtual Status Get(const ReadOptions& options,
                      const Slice& key, std::string* value) {
-    assert(false);      // Not implemented
+    assert(false);      // NOT IMPLEMENT
     return Status::NotFound(key);
   }
   virtual Iterator* NewIterator(const ReadOptions& options) {

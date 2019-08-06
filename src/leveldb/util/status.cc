@@ -50,7 +50,7 @@ std::string Status::ToString() const {
         type = "Corruption: ";
         break;
       case kNotSupported:
-        type = "Not implemented: ";
+        type = "NOT IMPLEMENT: ";
         break;
       case kInvalidArgument:
         type = "Invalid argument: ";

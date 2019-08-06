@@ -18,7 +18,7 @@ void WriteBatch::Put(Slice &key) {
 }
 
 void WriteBatch::Delete(Slice &key) {
-  // NOT IMPLEMENTED
+  // NOT IMPLEMENT
 }
 
 void WriteBatch::Clear() {
