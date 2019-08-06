@@ -9,6 +9,7 @@
 
 
 #include <stddef.h>
+#include <stdlib.h>
 #include "kvrangedb/comparator.h"
 
 namespace kvrangedb {
@@ -36,9 +37,52 @@ struct Options {
   const Comparator* comparator;
 
   // Ordered key index type
+  // Default: LSM structured ordered key index
+
+  // LSM -> LSM Tress structure index
+  // BTREE -> B Tree like external structure using K-V interface
+  // BASE -> Retrieve all keys from device (random order), then sort
   IndexType indexType;
-  Options() : indexType(LSM) {
-    comparator = BytewiseComparator();
+  
+  // Whether enable value prefetch for iterators
+  // Default: false
+  bool prefetchEnabled;
+
+  // Whether enable range filter for LSM index
+  // Default: false
+  bool rangefilterEnabled;
+
+  Options() : comparator(BytewiseComparator()),
+              indexType(LSM),
+              prefetchEnabled(false),
+              rangefilterEnabled(false) {
+    // Load from environment variable
+    char *env_p;
+    if(env_p = std::getenv("INDEX_TYPE")) {
+      if (strcmp(env_p, "LSM") == 0)
+        indexType = LSM;
+      else if (strcmp(env_p, "BTREE") == 0)
+        indexType = BTREE;
+      else if (strcmp(env_p, "BASE") == 0)
+        indexType = BASE;
+      else
+        indexType = LSM;
+    }
+
+    if(env_p = std::getenv("PREFETCH_ENA")) {
+      if (strcmp(env_p, "TRUE") == 0)
+        prefetchEnabled = true;
+      else
+        prefetchEnabled = false;
+    }
+
+    if(env_p = std::getenv("RANGE_FILTER_ENA")) {
+      if (strcmp(env_p, "TRUE") == 0)
+        rangefilterEnabled = true;
+      else
+        rangefilterEnabled = false;
+    }
+      
   };
 };
 
