@@ -48,6 +48,10 @@ struct Options {
   // Default: false
   bool prefetchEnabled;
 
+  // Prefetch buffer size
+  // Default: 16
+  int prefetchDepth;
+
   // Whether enable range filter for LSM index
   // Default: false
   bool rangefilterEnabled;
@@ -55,6 +59,7 @@ struct Options {
   Options() : comparator(BytewiseComparator()),
               indexType(LSM),
               prefetchEnabled(false),
+              prefetchDepth(16),
               rangefilterEnabled(false) {
     // Load from environment variable
     char *env_p;
@@ -74,6 +79,10 @@ struct Options {
         prefetchEnabled = true;
       else
         prefetchEnabled = false;
+    }
+
+    if(env_p = std::getenv("PREFETCH_DEPTH")) {
+      prefetchDepth = atoi(env_p);
     }
 
     if(env_p = std::getenv("RANGE_FILTER_ENA")) {

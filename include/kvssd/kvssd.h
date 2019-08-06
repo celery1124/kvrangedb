@@ -11,6 +11,13 @@
 #include "kvs_api.h"
 
 namespace kvssd {
+
+  typedef struct {
+    char*& vbuf;
+    uint32_t& actual_len;
+    void* args;
+  }Async_get_context;
+
   class KVSSD {
     private:
       char kvs_dev_path[32];
@@ -52,6 +59,7 @@ namespace kvssd {
       kvs_result kv_append(const Slice *key, const Slice *val);
       // caller must free vbuf memory
       kvs_result kv_get(const Slice *key, char*& vbuf, int& vlen);
+      kvs_result kv_get_async(const Slice *key, void (*callback)(void *), void *args);
       kvs_result kv_pget(const Slice *key, char*& vbuf, int count, int offset);
       kvs_result kv_delete(const Slice *key);
 

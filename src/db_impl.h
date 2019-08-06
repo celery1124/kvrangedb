@@ -17,6 +17,7 @@
 namespace kvrangedb {
 
 class DBImpl : public DB{
+friend class DBIterator;
 public:
   DBImpl(const Options& options, const std::string& dbname);
   ~DBImpl();
@@ -36,6 +37,8 @@ public:
 private:
   kvssd::KVSSD *kvd_;
   KVIndex *key_idx_;
+
+  const Options options_;
 };
 
 

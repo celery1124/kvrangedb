@@ -1,6 +1,6 @@
 #include "kvssd/kvssd.h"
 #define ITER_BUFF 32768
-#define INIT_GET_BUFF 49152 // 48KB
+#define INIT_GET_BUFF 65536 // 64KB
 
 namespace kvssd {
 
@@ -19,16 +19,17 @@ namespace kvssd {
       }
       break;
     }
-    // case IOCB_ASYNC_GET_CMD : {
-    //   void (*callback_get) (void *) = (void (*)(void *))ioctx->private1;
-    //   Async_get_context *args_get = (Async_get_context *)ioctx->private2;
-    //   args_get->vbuf = (char*) ioctx->value->value;
-    //   args_get->actual_len = ioctx->value->actual_value_size;
-    //   if (callback_get != NULL) {
-    //     callback_get((void *)args_get->args);
-    //   }
-    //   break;
-    // }
+    case IOCB_ASYNC_GET_CMD : {
+      void (*callback_get) (void *) = (void (*)(void *))ioctx->private1;
+      Async_get_context *args_get = (Async_get_context *)ioctx->private2;
+      args_get->vbuf = (char*) ioctx->value->value;
+      args_get->actual_len = ioctx->value->actual_value_size;
+      if (callback_get != NULL) {
+        callback_get((void *)args_get->args);
+      }
+      delete args_get;
+      break;
+    }
     // case IOCB_ASYNC_DEL_CMD : {
     //   void (*callback_del) (void *) = (void (*)(void *))ioctx->private1;
     //   void *args_del = (void *)ioctx->private2;
@@ -176,7 +177,7 @@ namespace kvssd {
     vlen = kvsvalue.actual_value_size;
     if (INIT_GET_BUFF < vlen) {
       // implement own aligned_realloc
-      char *realloc_vbuf = (char *) aligned_alloc(4096, vlen);
+      char *realloc_vbuf = (char *) malloc(vlen);
       memcpy(realloc_vbuf, vbuf, INIT_GET_BUFF);
       free(vbuf); vbuf = realloc_vbuf;
       kvsvalue.value = vbuf;
@@ -188,6 +189,32 @@ namespace kvssd {
     //printf("[kv_get] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), vlen);
     return ret;
   }
+  // ***** limitations *****
+  // currently consider async get buffer size is large enough
+  // in other words, async get can retrieve the whole value with 1 I/O.
+  kvs_result KVSSD::kv_get_async(const Slice *key, void (*callback)(void *), void *args) {
+    char *vbuf = (char *) malloc(INIT_GET_BUFF);
+    kvs_key *kvskey = (kvs_key*)malloc(sizeof(kvs_key));
+    kvskey->key = (void *) key->data();
+    kvskey->length = key->size();
+    kvs_value *kvsvalue = (kvs_value*)malloc(sizeof(kvs_value));
+    kvsvalue->value = vbuf;
+    kvsvalue->length = INIT_GET_BUFF;
+    kvsvalue->actual_value_size = kvsvalue->offset = 0;
+  
+    kvs_retrieve_option option;
+    memset(&option, 0, sizeof(kvs_retrieve_option));
+    option.kvs_retrieve_decompress = false;
+    option.kvs_retrieve_delete = false;
+    const kvs_retrieve_context ret_ctx = {option, (void *)callback, (void*)args};
+    kvs_result ret = kvs_retrieve_tuple_async(cont_handle, kvskey, kvsvalue, &ret_ctx, on_io_complete);
+    if(ret != KVS_SUCCESS) {
+      printf("kv_get_async error %d\n", ret);
+      exit(1);
+    }
+    return KVS_SUCCESS;
+  }
+
   // offset must be 64byte aligned (not support)
   kvs_result KVSSD::kv_pget(const Slice *key, char*& vbuf, int count, int offset) {
     vbuf = (char *) malloc(count+64);
