@@ -45,6 +45,7 @@ public:
   Slice value();
 private:
   DBImpl *db_;
+  const ReadOptions &options_;
   IDXIterator *it_;
   kvssd::KVSSD *kvd_;
   std::string value_;
@@ -61,7 +62,7 @@ private:
 };
 
 DBIterator::DBIterator(DBImpl *db, const ReadOptions &options) 
-: db_(db), kvd_(db->GetKVSSD()), valid_(false),
+: db_(db), options_(options), kvd_(db->GetKVSSD()), valid_(false),
   prefetch_depth_(1), queue_cur_(0) {
   if (db_->options_.prefetchEnabled) {
     int prefetch_depth = db_->options_.prefetchDepth;
@@ -183,8 +184,9 @@ Slice DBIterator::value() {
       std::vector<Slice> key_list;
       std::vector<Slice> val_list;
 
+      Slice upper_key(*(options_.upper_key));
       for (int i = 0; i < prefetch_depth_; i++) {
-        if(valid_queue_[i])
+        if(valid_queue_[i] && db_->options_.comparator->Compare(key_queue_[i], upper_key) < 0)
           key_list.push_back(Slice(key_queue_[i]));
         else break;
       }
