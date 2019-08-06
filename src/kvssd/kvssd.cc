@@ -17,6 +17,8 @@ namespace kvssd {
       if (callback_put != NULL) {
         callback_put((void *)args_put);
       }
+      if(ioctx->key) free(ioctx->key);
+      if(ioctx->value) free(ioctx->value);
       break;
     }
     case IOCB_ASYNC_GET_CMD : {
@@ -28,6 +30,8 @@ namespace kvssd {
         callback_get((void *)args_get->args);
       }
       delete args_get;
+      if(ioctx->key) free(ioctx->key);
+      if(ioctx->value) free(ioctx->value);
       break;
     }
     // case IOCB_ASYNC_DEL_CMD : {
@@ -43,6 +47,7 @@ namespace kvssd {
       break;
     }
     }
+
     return;
   }
 
@@ -99,10 +104,15 @@ namespace kvssd {
     option.kvs_store_compress = false;
 
     const kvs_store_context put_ctx = {option, (void *)callback, (void *)args};
-    const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size()};
-    const kvs_value kvsvalue = { (void *)val->data(), val->size(), 0, 0 /*offset */};
-    kvs_result ret = kvs_store_tuple_async(cont_handle, &kvskey, &kvsvalue, &put_ctx, on_io_complete);
-
+    kvs_key *kvskey = (kvs_key*)malloc(sizeof(kvs_key));
+    kvskey->key = (void *)key->data();
+    kvskey->length = (uint8_t)key->size();
+    kvs_value *kvsvalue = (kvs_value*)malloc(sizeof(kvs_value));
+    kvsvalue->value = (void *)val->data();
+    kvsvalue->length = val->size();
+    kvsvalue->actual_value_size = kvsvalue->offset = 0;
+    kvs_result ret = kvs_store_tuple_async(cont_handle, kvskey, kvsvalue, &put_ctx, on_io_complete);
+    
     if (ret != KVS_SUCCESS) {
         printf("kv_store_async error %s\n", kvs_errstr(ret));
         exit(1);
