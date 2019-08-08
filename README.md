@@ -26,6 +26,7 @@ Provide a leveldb like interface with:
 	make -j4
 
 	# copy libkvapi.so
+	mkdir $PRJ_HOME/libs
 	cp $KVSSD_HOME/build/libkvapi.so $PRJ_HOME/libs/
 ```
 
