@@ -176,23 +176,14 @@ int main () {
   CustomComparator cmp;
   kvrangedb::Options options;
   options.comparator = &cmp;
-#ifdef KVINDEX_LSM
-  options.indexType = kvrangedb::LSM;
-#else
-  #ifdef KVINDEX_BTREE
-  options.indexType = kvrangedb::BTREE;
-  #else
-    #ifdef KVINDEX_BASE
-  options.indexType = kvrangedb::BASE;
-    #else
-  options.indexType = kvrangedb::LSM; // default
-    #endif
-  #endif
-#endif
+
   kvrangedb::DB *db = NULL;
   kvrangedb::DB::Open(options, "/dev/kvemul", &db);
 
   DoWrite(db, num, 0);
+
+  sleep(1); // wait for write done
+
   RandomRead(db, num);
   RandomSeek(db, 10);
   DoScan(db, 10);
