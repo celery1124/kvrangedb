@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <set>
 #include <map>
+#include <mutex>
+#include <condition_variable>
+#include <thread>
 
 #include "slice.h"
 #include "cache.h"
@@ -17,8 +20,7 @@
 #include "kvssd/kvssd.h"
 
 #define IDEAL_KV_SIZE 32768
-#define MAX_MEM_ENTRIES 4096
-#define MAX_MEM_SIZE 65537
+#define MAX_MEM_SIZE 65536
 #define DEF_FANOUT 1024
 #define DEF_CACHE_ITEMS 64
 
@@ -32,8 +34,34 @@ struct custom_cmp {
   Comparator *cmp_;
 };
 
+// condition variable
+class CondVar {
+public:
+  std::mutex mtx_;
+  std::condition_variable cv_;
+  bool ready_ ;
+  CondVar() : ready_(false) {}
+  ~CondVar(){}
+  void reset() {ready_ = false;};
+  void notify_one() {
+    std::unique_lock<std::mutex> lck(mtx_);
+    ready_ = true;
+    cv_.notify_one();
+  }
+  void notify_all() {
+    std::unique_lock<std::mutex> lck(mtx_);
+    ready_ = true;
+    cv_.notify_all();
+  }
+  void wait() {
+    std::unique_lock<std::mutex> lck(mtx_);
+    while (!ready_) cv_.wait(lck);
+  }
+};
+
 class MemNode {
 private:
+    std::mutex m_;
     std::set<Slice, custom_cmp> sorted_run_; // keep internal node sorted for fast search
     uint32_t size_; // not accurate
 public:
@@ -143,11 +171,19 @@ class KVBplusTree {
 private:
     Comparator *cmp_;
     kvssd::KVSSD* kvd_;
+    std::mutex mutex_;
     MemNode *mem_;
+    MemNode *imm_;
     InternalNode *root_;
     Cache *innode_cache_;
     uint32_t level_; // Non-leaf levels
     int fanout_;
+
+    // BG thread
+    CondVar bg_start;
+    CondVar bg_end;
+    pthread_t t_BG;
+    void bg_worker(KVBplusTree *tree);
 public:
     KVBplusTree(Comparator *cmp, kvssd::KVSSD *kvd, int fanout = DEF_FANOUT, int cache_size = DEF_CACHE_ITEMS);
     ~KVBplusTree();
@@ -155,7 +191,7 @@ public:
     InternalNode* GetRoot() {return root_;}
     kvssd::KVSSD* GetDev() {return kvd_;}
 
-    void BulkAppend(int MemEntriesWaterMark);
+    void BulkAppend(MemNode *mem, int MemEntriesWaterMark);
     bool Insert(Slice *key);
     bool Write(WriteBatch *batch);
 

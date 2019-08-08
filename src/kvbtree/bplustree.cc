@@ -11,8 +11,11 @@ namespace kvbtree {
 void MemNode::Insert(Slice *key) {
     char *key_buf = (char *)malloc(key->size());
     memcpy(key_buf, key->data(), key->size());
-    sorted_run_.insert(Slice(key_buf, key->size()));
-    size_ += key->size();
+    {
+        std::unique_lock<std::mutex> lock(m_);
+        sorted_run_.insert(Slice(key_buf, key->size()));
+        size_ += key->size();
+    }
 }
 
 void MemNode::BulkKeys(Slice *hk, uint32_t size, char *&buf, int &buf_entries, int &buf_size){
@@ -310,18 +313,38 @@ KVBplusTree::KVBplusTree (Comparator *cmp, kvssd::KVSSD *kvd, int fanout, int ca
     char zero_buf[sizeof(uint32_t)] = {0};
     kvssd::Slice dummy_val(zero_buf, sizeof(uint32_t));
     kvd_->kv_store(&dummy_leaf, &dummy_val);
+
+    // background thread
+    std::thread thrd = std::thread(&KVBplusTree::bg_worker, this, this);
+    t_BG = thrd.native_handle();
+    thrd.detach();
 }
 
 KVBplusTree::~KVBplusTree () {
+    if (imm_ != NULL) bg_end.wait();
+    BulkAppend(mem_, 0);
     delete mem_;
     delete root_;
     delete innode_cache_;
 }
 
-void KVBplusTree::BulkAppend(int MemEntriesWaterMark) {
-    while (mem_->NumEntries() > MemEntriesWaterMark || mem_->Size() > MAX_MEM_SIZE) {
+void KVBplusTree::bg_worker(KVBplusTree *tree) {
+    CondVar *cv_start = &(tree->bg_start);
+    CondVar *cv_end = &(tree->bg_end);
+    while (true) {
+        cv_start->wait(); // wait for bg job trigger
+        tree->BulkAppend(imm_, 0); // bulk append imm_
+        delete imm_;
+        imm_ = NULL;
+        cv_end->notify_all();
+        cv_start->reset();
+    }
+}
+
+void KVBplusTree::BulkAppend(MemNode *mem, int MemEntriesWaterMark) {
+    while (mem->NumEntries() > MemEntriesWaterMark || mem->Size() > MAX_MEM_SIZE) {
         // 1, get smallest key in MemNode
-        Slice key_target = mem_->FirstKey();
+        Slice key_target = mem->FirstKey();
         std::string key_target_str = key_target.ToString();
 
         // 2, find leaf node
@@ -367,7 +390,7 @@ void KVBplusTree::BulkAppend(int MemEntriesWaterMark) {
         Slice leaf_right;
         int leaf_right_entries;
         char *mem_buf; int mem_buf_entries; int mem_buf_size;
-        mem_->BulkKeys(&upper_key, fanout_/2, mem_buf, mem_buf_entries, mem_buf_size);
+        mem->BulkKeys(&upper_key, fanout_/2, mem_buf, mem_buf_entries, mem_buf_size);
 
         int leaf_entries = node->GetChildEntries(&lower_key) + mem_buf_entries;
         LeafNode *leaf_node = NULL;
@@ -452,17 +475,34 @@ void KVBplusTree::BulkAppend(int MemEntriesWaterMark) {
 }
 
 bool KVBplusTree::Insert (Slice *key) {
-    mem_->Insert(key);
-    BulkAppend(MAX_MEM_ENTRIES);
+    WriteBatch batch;
+    batch.Put(*key);
+    Write(&batch);
 }
 
 bool KVBplusTree::Write (WriteBatch *batch) {
+    // check mem_ size
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (mem_->Size() >= MAX_MEM_SIZE && imm_ == NULL) {
+        // signal background thread bulkappend
+        imm_ = mem_;
+        mem_ = new MemNode(cmp_);
+        bg_start.notify_one();
+    }
+    else if (mem_->Size() >= MAX_MEM_SIZE && imm_ != NULL) {
+        // block all writer thread and wait for bg thread finish
+        bg_end.wait();
+        bg_end.reset();
+    }
+    else { // mem_->Size() < MAX_MEM_SIZE
+        // do nothing, release lock
+    }
+    // write to mem_ is serialized
     auto it = batch->Iterator();
-    for (; batch->End(it); it++ ) {
+    for (; !batch->End(it); it++ ) {
         Slice key = *it;
         mem_->Insert(&key);
     }
-    BulkAppend(MAX_MEM_ENTRIES);
 }
 
 void KVBplusTree::Iterator::SeekToFirst() {
@@ -471,8 +511,8 @@ void KVBplusTree::Iterator::SeekToFirst() {
 }
 
 void KVBplusTree::Iterator::Seek(Slice *key) {
-    // dump MemNode
-    tree_->BulkAppend(0);
+    // dump MemNode (make sure mem buffer is append in the tree)
+    tree_->BulkAppend(tree_->mem_, 0);
 
     int level = tree_->GetLevel();
     InternalNode *node = tree_->GetRoot();
