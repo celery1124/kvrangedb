@@ -300,19 +300,56 @@ static void DeleteCacheItem (const Slice& key, void* value) {
     delete (InternalNode *)value;
 }
 
+void KVBplusTree::WriteMetaKV() {
+    kvssd::Slice metaKV_key("KVBTREE_CURRENT");
+    kvssd::Slice metaKV_val((char *)&level_, sizeof(level_));
+    // write level_ to metaKV
+    kvd_->kv_store(&metaKV_key, &metaKV_val);
+}
+
+bool KVBplusTree::ReadMetaKV() {
+    bool newDB;
+    kvssd::Slice metaKV_key("KVBTREE_CURRENT");
+    char *vbuf; int vlen;
+    kvs_result ret = kvd_->kv_get(&metaKV_key, vbuf, vlen);
+    if (ret == KVS_ERR_KEY_NOT_EXIST) {
+        newDB = true;
+    }
+    else if (ret == KVS_SUCCESS) {
+        newDB = false;
+        // parse metaKV
+        level_ = *((uint32_t *)vbuf);
+        free (vbuf);
+    }
+    return newDB;
+}
+
 KVBplusTree::KVBplusTree (Comparator *cmp, kvssd::KVSSD *kvd, int fanout, int cache_size) 
 : cmp_(cmp), kvd_(kvd), level_(1), fanout_(fanout) {
-    mem_ = new MemNode(cmp_);
-    root_ = new InternalNode(cmp_, kvd_, NULL, fanout_, 0);
-    innode_cache_ = NewLRUCache(cache_size);
-    Slice dummy(NULL, 0);
-    root_->InsertEntry(&dummy, 0, 0); // add dummy head
+    // New index or not ? Read KVBTREE_CURRENT Record
+    bool newDB = ReadMetaKV();
 
-    // write a dummy leaf node
-    kvssd::Slice dummy_leaf("leaf");
-    char zero_buf[sizeof(uint32_t)] = {0};
-    kvssd::Slice dummy_val(zero_buf, sizeof(uint32_t));
-    kvd_->kv_store(&dummy_leaf, &dummy_val);
+    Slice dummy(NULL, 0);
+    mem_ = new MemNode(cmp_);
+    imm_ = NULL;
+    innode_cache_ = NewLRUCache(cache_size);
+    if (newDB) {
+        root_ = new InternalNode(cmp_, kvd_, NULL, fanout_, 0);
+        root_->InsertEntry(&dummy, 0, 0); // add dummy head
+
+        // write a dummy leaf node
+        kvssd::Slice dummy_leaf("leaf");
+        char zero_buf[sizeof(uint32_t)] = {0};
+        kvssd::Slice dummy_val(zero_buf, sizeof(uint32_t));
+        kvd_->kv_store(&dummy_leaf, &dummy_val);
+    }
+    else {
+        std::string root_key = "level"+std::to_string(level_-1);
+        kvssd::Slice root_key_(root_key);
+        char *vbuf; int vlen;
+        kvd_->kv_get(&root_key_, vbuf, vlen);
+        root_ = new InternalNode(cmp_, kvd_, NULL, fanout_, level_-1, vbuf, vlen);
+    }
 
     // background thread
     std::thread thrd = std::thread(&KVBplusTree::bg_worker, this, this);
@@ -326,6 +363,7 @@ KVBplusTree::~KVBplusTree () {
     delete mem_;
     delete root_;
     delete innode_cache_;
+    WriteMetaKV(); // write metaKV
 }
 
 void KVBplusTree::bg_worker(KVBplusTree *tree) {

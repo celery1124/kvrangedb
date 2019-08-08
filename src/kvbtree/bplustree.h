@@ -184,6 +184,9 @@ private:
     CondVar bg_end;
     pthread_t t_BG;
     void bg_worker(KVBplusTree *tree);
+
+    bool ReadMetaKV();
+    void WriteMetaKV();
 public:
     KVBplusTree(Comparator *cmp, kvssd::KVSSD *kvd, int fanout = DEF_FANOUT, int cache_size = DEF_CACHE_ITEMS);
     ~KVBplusTree();
@@ -211,7 +214,6 @@ public:
     };
     Iterator* NewIterator();
 
-private:
 };
 
 }
