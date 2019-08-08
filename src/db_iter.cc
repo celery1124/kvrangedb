@@ -184,10 +184,19 @@ Slice DBIterator::value() {
       std::vector<Slice> key_list;
       std::vector<Slice> val_list;
 
-      Slice upper_key(*(options_.upper_key));
+      Slice upper_key;
+      if (options_.upper_key != NULL) {
+        upper_key = *(options_.upper_key);
+      }
       for (int i = 0; i < prefetch_depth_; i++) {
-        if(valid_queue_[i] && db_->options_.comparator->Compare(key_queue_[i], upper_key) < 0)
-          key_list.push_back(Slice(key_queue_[i]));
+        if(valid_queue_[i]) {
+          if (upper_key.size() > 0 && db_->options_.comparator->Compare(key_queue_[i], upper_key) < 0) {
+            
+          }
+          else if (upper_key.size() == 0)
+            key_list.push_back(Slice(key_queue_[i]));
+          else {} // do nothing
+        }
         else break;
       }
       prefetch_value(key_list, val_list);
