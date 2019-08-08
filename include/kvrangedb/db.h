@@ -73,6 +73,12 @@ class DB {
   // The returned iterator should be deleted before this db is deleted.
   virtual Iterator* NewIterator(const ReadOptions& options) = 0;
 
+
+  // DEBUG ONLY
+  // Help test with in-memory only KVSSD emulator
+  virtual void close_idx(){};
+  virtual void open_idx(){};
+
  private:
   // No copying allowed
   DB(const DB&);

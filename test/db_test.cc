@@ -183,6 +183,10 @@ int main () {
   DoWrite(db, num, 0);
 
   sleep(1); // wait for write done
+  db->close_idx(); // close db index
+
+  // open db index again
+  db->open_idx();
 
   RandomRead(db, num);
   RandomSeek(db, 10);

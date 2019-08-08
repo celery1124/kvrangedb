@@ -59,6 +59,25 @@ private:
   KVIndex *key_idx_;
 
   const Options options_;
+
+public:
+  // DEBUG ONLY
+  void close_idx () {
+    delete key_idx_;
+  }
+  void open_idx() {
+    if (options_.indexType == LSM)
+      key_idx_ = NewLSMIndex(options_, kvd_);
+    else if (options_.indexType == BTREE)
+      key_idx_ = NewBTreeIndex(options_, kvd_);
+    else if (options_.indexType == BASE) {
+      key_idx_ = NewBaseIndex(options_, kvd_);
+    }
+    else {
+      printf("WRONG KV INDEX TYPE\n");
+      exit(-1);
+    }
+  }
 };
 
 
