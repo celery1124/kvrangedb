@@ -191,7 +191,7 @@ Slice DBIterator::value() {
       for (int i = 0; i < prefetch_depth_; i++) {
         if(valid_queue_[i]) {
           if (upper_key.size() > 0 && db_->options_.comparator->Compare(key_queue_[i], upper_key) < 0) {
-            
+            key_list.push_back(Slice(key_queue_[i]));
           }
           else if (upper_key.size() == 0)
             key_list.push_back(Slice(key_queue_[i]));

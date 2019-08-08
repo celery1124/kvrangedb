@@ -35,7 +35,7 @@ void MemNode::BulkKeys(Slice *hk, uint32_t size, char *&buf, int &buf_entries, i
             buf_size += it->size() + sizeof(uint32_t);
             ++it;
             buf_entries++;
-        } while (buf_entries < size && it->compare(*hk) < 0 && it != sorted_run_.end());
+        } while (it != sorted_run_.end() && buf_entries < size && it->compare(*hk) < 0);
     }
     
     //printf("bulk size %d\n", buf_entries);
