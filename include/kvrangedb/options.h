@@ -75,7 +75,7 @@ struct Options {
     }
 
     if(env_p = std::getenv("PREFETCH_ENA")) {
-      if (strcmp(env_p, "TRUE") == 0)
+      if (strcmp(env_p, "TRUE") == 0 || strcmp(env_p, "true") == 0)
         prefetchEnabled = true;
       else
         prefetchEnabled = false;
@@ -86,7 +86,7 @@ struct Options {
     }
 
     if(env_p = std::getenv("RANGE_FILTER_ENA")) {
-      if (strcmp(env_p, "TRUE") == 0)
+      if (strcmp(env_p, "TRUE") == 0 || strcmp(env_p, "true") == 0)
         rangefilterEnabled = true;
       else
         rangefilterEnabled = false;
