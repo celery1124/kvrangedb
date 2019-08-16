@@ -93,6 +93,7 @@ KVIndexBTree::KVIndexBTree(const Options& db_options, kvssd::KVSSD* kvd) : kvd_(
 
 KVIndexBTree::~KVIndexBTree() {
   delete db_;
+  delete cmp_;
 }
 
 KVIndex* NewBTreeIndex(const Options& options, kvssd::KVSSD* kvd) {

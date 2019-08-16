@@ -18,7 +18,7 @@ namespace kvrangedb {
 class ComparatorLSM : public leveldb::Comparator {
 public:
   ComparatorLSM(const kvrangedb::Comparator* cmp) : cmp_(cmp) {};
-  ~ComparatorLSM() {};
+  //~ComparatorLSM() {};
   int Compare(const leveldb::Slice& a, const leveldb::Slice& b) const {
     Slice aa(a.data(), a.size());
     Slice bb(b.data(), b.size());
@@ -145,8 +145,8 @@ KVIndexLSM::KVIndexLSM(const Options& db_options, kvssd::KVSSD* kvd) : kvd_(kvd)
 }
 
 KVIndexLSM::~KVIndexLSM() {
-  delete cmp_;
   delete db_;
+  delete cmp_;
 }
 
 KVIndex* NewLSMIndex(const Options& options, kvssd::KVSSD* kvd) {
