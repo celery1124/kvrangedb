@@ -453,6 +453,7 @@ void KVBplusTree::BulkAppend(MemNode *mem, int MemEntriesWaterMark) {
             kvssd::Slice leaf_key(leaf_key_str);
             kvssd::Slice leaf_val(mem_buf, mem_buf_size);
             kvd_->kv_append(&leaf_key, &leaf_val);
+            //kvd_->kv_append_async(&leaf_key, &leaf_val, NULL, NULL);
         }
 
         // 4, update internal node (recursive)

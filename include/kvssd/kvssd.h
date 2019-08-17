@@ -12,11 +12,13 @@
 
 namespace kvssd {
 
-  typedef struct {
+  struct Async_get_context {
     char*& vbuf;
     uint32_t& actual_len;
     void* args;
-  }Async_get_context;
+    Async_get_context(char *&buf, uint32_t &len, void *args)
+    : vbuf(buf), actual_len(len), args(args) {};
+  } ;
 
   class KVSSD {
     private:
@@ -57,6 +59,7 @@ namespace kvssd {
       kvs_result kv_store(const Slice *key, const Slice *val);
       kvs_result kv_store_async(Slice *key, Slice *val, void (*callback)(void *), void *args);
       kvs_result kv_append(const Slice *key, const Slice *val);
+      kvs_result kv_append_async(const Slice *key, const Slice *val, void (*callback)(void *), void *args);
       // caller must free vbuf memory
       kvs_result kv_get(const Slice *key, char*& vbuf, int& vlen);
       kvs_result kv_get_async(const Slice *key, void (*callback)(void *), void *args);

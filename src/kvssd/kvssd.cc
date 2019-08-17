@@ -5,6 +5,9 @@
 namespace kvssd {
 
   void on_io_complete(kvs_callback_context* ioctx) {
+    if (ioctx->result == KVS_ERR_CONT_NOT_EXIST) {
+      int test = 1;
+    }
     if (ioctx->result != 0 && ioctx->result != KVS_ERR_KEY_NOT_EXIST) {
       printf("io error: op = %d, key = %s, result = 0x%x, err = %s\n", ioctx->opcode, ioctx->key ? (char*)ioctx->key->key:0, ioctx->result, kvs_errstr(ioctx->result));
       exit(1);
@@ -137,6 +140,7 @@ namespace kvssd {
   //   //printf("[kv_append] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
   //   return ret;
   // }
+
   // inplement append using kv_store and kv_get
   kvs_result KVSSD::kv_append(const Slice *key, const Slice *val) {
     // get old KV
@@ -168,6 +172,69 @@ namespace kvssd {
     free(vbuf); // release buffer from kv_get
     //printf("[kv_append] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
     return ret;
+  }
+
+
+  typedef struct {
+    KVSSD *kvd;
+    Slice *key;
+    Slice *val;
+    void (*cb) (void *) ;
+    void *args;
+    Async_get_context *get_ctx;
+  } Async_append_context;
+
+  typedef struct {
+    char *vbuf;
+    void (*cb) (void *) ;
+    void *args;
+    Async_append_context *append_ctx;
+  } Async_append_cleanup;
+
+  static void kv_append_cleanup (void *args) {
+    Async_append_cleanup *cleanup = (Async_append_cleanup *)args;
+    free(cleanup->vbuf);
+    if (cleanup->cb != NULL)
+      cleanup->cb(cleanup->args);
+
+    delete cleanup->append_ctx;
+    delete cleanup;
+  }
+
+  static void kv_append_async_callback(void *args) {
+    // store new value
+    Async_append_context *append_ctx = (Async_append_context *)args;
+    Async_get_context *ctx = (Async_get_context *)append_ctx->get_ctx;
+    
+    // append value
+    ctx->vbuf = (char *)realloc(ctx->vbuf, ctx->actual_len+append_ctx->val->size());  
+    memcpy(ctx->vbuf+ctx->actual_len, append_ctx->val->data(), append_ctx->val->size());
+    Slice new_val (ctx->vbuf, append_ctx->val->size() + ctx->actual_len);
+
+    Async_append_cleanup *cleanup = new Async_append_cleanup;
+    cleanup->vbuf = ctx->vbuf;
+    cleanup->cb = append_ctx->cb;
+    cleanup->args = append_ctx->args;
+    cleanup->append_ctx = append_ctx;
+    append_ctx->kvd->kv_store_async(append_ctx->key, &new_val, 
+                              kv_append_cleanup, cleanup);
+    
+  }
+
+  // implement async kv append using kv_get_async and kv_store_async
+  kvs_result KVSSD::kv_append_async(const Slice *key, const Slice *val, void (*callback)(void *), void *args) {
+    // get old KV
+    Async_append_context *io_ctx = new Async_append_context;
+    io_ctx->kvd = this;
+    io_ctx->key = (Slice *)key;
+    io_ctx->val = (Slice *)val;
+    io_ctx->cb = callback;
+    io_ctx->args = args;
+
+    char *vbuf; uint32_t size;
+    Async_get_context *get_ctx = new Async_get_context(vbuf, size, io_ctx);
+    io_ctx->get_ctx = get_ctx;
+    return kv_get_async(key, kv_append_async_callback, get_ctx);
   }
 
   kvs_result KVSSD::kv_get(const Slice *key, char*& vbuf, int& vlen) {
