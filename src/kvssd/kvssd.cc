@@ -180,7 +180,7 @@ namespace kvssd {
     option.kvs_retrieve_delete = false;
     const kvs_retrieve_context ret_ctx = {option, 0, 0};
     kvs_result ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
-    if(ret != KVS_SUCCESS) {
+    if(ret == KVS_ERR_KEY_NOT_EXIST) {
       return ret;
     }
     //if (ret == KVS_ERR_BUFFER_SMALL) { // do anther IO KVS_ERR_BUFFER_SMALL not working
@@ -192,7 +192,7 @@ namespace kvssd {
       free(vbuf); vbuf = realloc_vbuf;
       kvsvalue.value = vbuf;
       kvsvalue.length = vlen;
-      kvsvalue.offset = INIT_GET_BUFF; // skip the first IO buffer
+      kvsvalue.offset = INIT_GET_BUFF; // skip the first IO buffer (not support, actually read whole value)
       ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
       
     }
