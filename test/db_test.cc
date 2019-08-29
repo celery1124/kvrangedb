@@ -109,6 +109,20 @@ void DoWrite(kvrangedb::DB *db, int num, bool seq) {
     }
 }
 
+void DoDelete(kvrangedb::DB *db, int num, bool seq) {
+    RandomGenerator gen;
+    Random rand(0);
+    kvrangedb::WriteOptions wropts;
+    for (int i = 0; i < num; i++) {
+        const int k = seq ? i : (rand.Next() % num);
+        char key[100];
+        snprintf(key, sizeof(key), "%016d", k);
+
+        db->Delete(wropts, key);
+        //printf("[delete] key %s\n", key);
+    }
+}
+
 void RandomRead(kvrangedb::DB *db, int num) {
   Random rand(0);
   kvrangedb::ReadOptions rdopts;
