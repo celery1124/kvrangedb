@@ -105,6 +105,8 @@ void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>
     val_list.push_back(Slice(vbuf_list[i], actual_vlen_list[i]));
   
   // de-allocate resources
+  delete [] vbuf_list;
+  delete [] actual_vlen_list;
   delete ctx;
 }
 
