@@ -27,6 +27,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   else if (options.indexType == BASE) {
     key_idx_ = NewBaseIndex(options, kvd_);
   }
+  else if (options.indexType == INMEM) {
+    key_idx_ = NewInMemIndex(options, kvd_);
+  }
   else {
     printf("WRONG KV INDEX TYPE\n");
     exit(-1);

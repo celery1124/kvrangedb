@@ -73,6 +73,9 @@ public:
     else if (options_.indexType == BASE) {
       key_idx_ = NewBaseIndex(options_, kvd_);
     }
+    else if (options_.indexType == INMEM) {
+      key_idx_ = NewInMemIndex(options_, kvd_);
+    }
     else {
       printf("WRONG KV INDEX TYPE\n");
       exit(-1);

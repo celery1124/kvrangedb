@@ -20,7 +20,8 @@ class Slice;
 enum IndexType {
   LSM,
   BTREE,
-  BASE
+  BASE,
+	INMEM
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
@@ -42,6 +43,7 @@ struct Options {
   // LSM -> LSM Tress structure index
   // BTREE -> B Tree like external structure using K-V interface
   // BASE -> Retrieve all keys from device (random order), then sort
+	// INMEM -> Keep sorted keys in-memory, assume apps keep order
   IndexType indexType;
   
   // Whether enable value prefetch for iterators
@@ -70,6 +72,8 @@ struct Options {
         indexType = BTREE;
       else if (strcmp(env_p, "BASE") == 0)
         indexType = BASE;
+			else if (strcmp(env_p, "INMEM") == 0)
+				indexType = INMEM;
       else
         indexType = LSM;
     }
