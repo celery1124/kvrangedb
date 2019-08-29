@@ -22,6 +22,7 @@ class KVSequentialFile: public SequentialFile {
   }
 
   virtual ~KVSequentialFile() {
+    free(mapped_region_);
   }
 
   // n is aligned with 64B
