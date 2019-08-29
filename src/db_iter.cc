@@ -68,6 +68,7 @@ DBIterator::DBIterator(DBImpl *db, const ReadOptions &options)
     int prefetch_depth = db_->options_.prefetchDepth;
     key_queue_ = new std::string[prefetch_depth];
     val_queue_ = new Slice[prefetch_depth];
+    for (int i = 0 ; i < prefetch_depth; i++) val_queue_[i].clear();
     valid_queue_ = new bool[prefetch_depth];
   }
   it_ = db->GetKVIndex()->NewIterator(options);
@@ -78,6 +79,9 @@ DBIterator::~DBIterator() {
 
   if (db_->options_.prefetchEnabled) {
     delete [] key_queue_;
+    for (int i = 0 ; i < db_->options_.prefetchDepth; i++) {
+      if (val_queue_[i].size() != 0) free((void *)val_queue_[i].data());
+    }
     delete [] val_queue_;
     delete [] valid_queue_;
   }
@@ -142,6 +146,7 @@ void DBIterator::Next() {
       // release allocated memory vbuf
       for (int i = 0; i < prefetch_depth_; i++) {
         free ((void *)val_queue_[i].data());
+        val_queue_[i].clear();
       }
       // calculate prefetch depth 
       if (prefetch_depth_ < db_->options_.prefetchDepth) {
