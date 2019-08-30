@@ -22,7 +22,7 @@
 #define IDEAL_KV_SIZE 32768
 #define MAX_MEM_SIZE 65536
 #define DEF_FANOUT 1024
-#define DEF_CACHE_ITEMS 64
+#define DEF_CACHE_ITEMS 4096
 
 namespace kvbtree {
 
