@@ -315,46 +315,46 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   // Note that PrevLogNumber() is no longer used, but we pay
   // attention to it in case we are recovering a database
   // produced by an older version of leveldb.
-  const uint64_t min_log = versions_->LogNumber();
-  const uint64_t prev_log = versions_->PrevLogNumber();
-  std::vector<std::string> filenames;
-  s = env_->GetChildren(dbname_, &filenames);
-  if (!s.ok()) {
-    return s;
-  }
-  std::set<uint64_t> expected;
-  versions_->AddLiveFiles(&expected);
-  uint64_t number;
-  FileType type;
-  std::vector<uint64_t> logs;
-  for (size_t i = 0; i < filenames.size(); i++) {
-    if (ParseFileName(filenames[i], &number, &type)) {
-      expected.erase(number);
-      if (type == kLogFile && ((number >= min_log) || (number == prev_log)))
-        logs.push_back(number);
-    }
-  }
-  if (!expected.empty()) {
-    char buf[50];
-    snprintf(buf, sizeof(buf), "%d missing files; e.g.",
-             static_cast<int>(expected.size()));
-    return Status::Corruption(buf, TableFileName(dbname_, *(expected.begin())));
-  }
+  // const uint64_t min_log = versions_->LogNumber();
+  // const uint64_t prev_log = versions_->PrevLogNumber();
+  // std::vector<std::string> filenames;
+  // s = env_->GetChildren(dbname_, &filenames);
+  // if (!s.ok()) {
+  //   return s;
+  // }
+  // std::set<uint64_t> expected;
+  // versions_->AddLiveFiles(&expected);
+  // uint64_t number;
+  // FileType type;
+  // std::vector<uint64_t> logs;
+  // for (size_t i = 0; i < filenames.size(); i++) {
+  //   if (ParseFileName(filenames[i], &number, &type)) {
+  //     expected.erase(number);
+  //     if (type == kLogFile && ((number >= min_log) || (number == prev_log)))
+  //       logs.push_back(number);
+  //   }
+  // }
+  // if (!expected.empty()) {
+  //   char buf[50];
+  //   snprintf(buf, sizeof(buf), "%d missing files; e.g.",
+  //            static_cast<int>(expected.size()));
+  //   return Status::Corruption(buf, TableFileName(dbname_, *(expected.begin())));
+  // }
 
-  // Recover in the order in which the logs were generated
-  std::sort(logs.begin(), logs.end());
-  for (size_t i = 0; i < logs.size(); i++) {
-    s = RecoverLogFile(logs[i], (i == logs.size() - 1), save_manifest, edit,
-                       &max_sequence);
-    if (!s.ok()) {
-      return s;
-    }
+  // // Recover in the order in which the logs were generated
+  // std::sort(logs.begin(), logs.end());
+  // for (size_t i = 0; i < logs.size(); i++) {
+  //   s = RecoverLogFile(logs[i], (i == logs.size() - 1), save_manifest, edit,
+  //                      &max_sequence);
+  //   if (!s.ok()) {
+  //     return s;
+  //   }
 
-    // The previous incarnation may not have written any MANIFEST
-    // records after allocating this log number.  So we manually
-    // update the file number allocation counter in VersionSet.
-    versions_->MarkFileNumberUsed(logs[i]);
-  }
+  //   // The previous incarnation may not have written any MANIFEST
+  //   // records after allocating this log number.  So we manually
+  //   // update the file number allocation counter in VersionSet.
+  //   versions_->MarkFileNumberUsed(logs[i]);
+  // }
 
   if (versions_->LastSequence() < max_sequence) {
     versions_->SetLastSequence(max_sequence);
