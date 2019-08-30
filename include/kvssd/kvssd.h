@@ -62,7 +62,7 @@ typedef struct {
       ~KVSSD() {
         kvs_close_container(cont_handle);
         kvs_close_device(dev);
-        FILE *fd = fopen("kv_device.log","a");
+        FILE *fd = fopen("kv_device.log","w");
         fprintf(fd, "store %d, append %d, get %d, delete %d\n",stats_.num_store.load(), stats_.num_append.load(), stats_.num_retrieve.load(), stats_.num_delete.load());
         fclose(fd);
       }
