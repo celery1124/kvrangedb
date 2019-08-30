@@ -97,6 +97,7 @@ namespace kvssd {
         printf("STORE tuple failed with err %s\n", kvs_errstr(ret));
         exit(1);
     }
+    stats_.num_store.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_store] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
     return ret;
   }
@@ -120,6 +121,7 @@ namespace kvssd {
         printf("kv_store_async error %s\n", kvs_errstr(ret));
         exit(1);
     }
+    stats_.num_store.fetch_add(1, std::memory_order_relaxed);
     return ret;
   }
   // (not support in device)
@@ -170,6 +172,7 @@ namespace kvssd {
         exit(1);
     }
     free(vbuf); // release buffer from kv_get
+    stats_.num_append.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_append] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
     return ret;
   }
@@ -235,6 +238,8 @@ namespace kvssd {
     Async_get_context *get_ctx = new Async_get_context(vbuf, size, io_ctx);
     io_ctx->get_ctx = get_ctx;
     return kv_get_async(key, kv_append_async_callback, get_ctx);
+
+    stats_.num_append.fetch_add(1, std::memory_order_relaxed);
   }
 
   kvs_result KVSSD::kv_get(const Slice *key, char*& vbuf, int& vlen) {
@@ -261,8 +266,11 @@ namespace kvssd {
       kvsvalue.length = vlen + 4 - (vlen%4);
       kvsvalue.offset = INIT_GET_BUFF; // skip the first IO buffer (not support, actually read whole value)
       ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
+
+      stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
       
     }
+    stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_get] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), vlen);
     return ret;
   }
@@ -289,6 +297,7 @@ namespace kvssd {
       printf("kv_get_async error %d\n", ret);
       exit(1);
     }
+    stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
     return KVS_SUCCESS;
   }
 
@@ -320,6 +329,7 @@ namespace kvssd {
         printf("delete tuple failed with error %s\n", kvs_errstr(ret));
         exit(1);
     }
+    stats_.num_delete.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_delete] key: %s\n",std::string(key->data(),key->size()).c_str());
     return ret;
   }

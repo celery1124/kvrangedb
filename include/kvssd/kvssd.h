@@ -6,11 +6,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
+#include <atomic>
 #include <vector>
 #include "slice.h"
 #include "kvs_api.h"
 
 namespace kvssd {
+
+typedef struct {
+      std::atomic<uint32_t> num_store{0};
+      std::atomic<uint32_t> num_append{0};
+      std::atomic<uint32_t> num_retrieve{0};
+      std::atomic<uint32_t> num_delete{0};
+  } kvd_stats;
 
   struct Async_get_context {
     char*& vbuf;
@@ -27,6 +35,7 @@ namespace kvssd {
       kvs_device_handle dev;
       kvs_container_context ctx;
       kvs_container_handle cont_handle;
+      kvd_stats stats_;
     public:
       KVSSD(const char* dev_path) {
         memset(kvs_dev_path, 0, 32);
@@ -53,6 +62,9 @@ namespace kvssd {
       ~KVSSD() {
         kvs_close_container(cont_handle);
         kvs_close_device(dev);
+        FILE *fd = fopen("kv_device.log","a");
+        fprintf(fd, "store %d, append %d, get %d, delete %d\n",stats_.num_store.load(), stats_.num_append.load(), stats_.num_retrieve.load(), stats_.num_delete.load());
+        fclose(fd);
       }
       bool kv_exist (const Slice *key);
       uint32_t kv_get_size(const Slice *key);
