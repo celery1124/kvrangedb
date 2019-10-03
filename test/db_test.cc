@@ -185,7 +185,7 @@ public:
 };
 
 int main () {
-  int num = 10000;
+  int num = 1000000;
 
   CustomComparator cmp;
   kvrangedb::Options options;

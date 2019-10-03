@@ -147,7 +147,33 @@ namespace kvssd {
   kvs_result KVSSD::kv_append(const Slice *key, const Slice *val) {
     // get old KV
     char *vbuf; int vlen;
-    kvs_result ret = kv_get(key, vbuf, vlen);
+    kvs_result ret;
+    {
+      vbuf = (char *) malloc(INIT_GET_BUFF);
+      const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size() };
+      kvs_value kvsvalue = { vbuf, INIT_GET_BUFF , 0, 0 /*offset */}; //prepare initial buffer
+      kvs_retrieve_option option;
+      memset(&option, 0, sizeof(kvs_retrieve_option));
+      option.kvs_retrieve_decompress = false;
+      option.kvs_retrieve_delete = false;
+      const kvs_retrieve_context ret_ctx = {option, 0, 0};
+      ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
+      if(ret != KVS_ERR_KEY_NOT_EXIST) {
+        vlen = kvsvalue.actual_value_size;
+        if (INIT_GET_BUFF < vlen) {
+          // implement own aligned_realloc
+          char *realloc_vbuf = (char *) malloc(vlen + 4 - (vlen%4));
+          memcpy(realloc_vbuf, vbuf, INIT_GET_BUFF);
+          free(vbuf); vbuf = realloc_vbuf;
+          kvsvalue.value = vbuf;
+          kvsvalue.length = vlen + 4 - (vlen%4);
+          kvsvalue.offset = INIT_GET_BUFF; // skip the first IO buffer (not support, actually read whole value)
+          ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
+        }
+      }
+
+    }
+    
 
     kvs_store_option option;
     option.st_type = KVS_STORE_POST;
