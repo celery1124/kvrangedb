@@ -331,7 +331,6 @@ KVBplusTree::KVBplusTree (Comparator *cmp, kvssd::KVSSD *kvd, int fanout, int ca
 
     Slice dummy(NULL, 0);
     mem_ = new MemNode(cmp_);
-    imm_ = NULL;
     innode_cache_ = NewLRUCache(cache_size);
     if (newDB) {
         root_ = new InternalNode(cmp_, kvd_, NULL, fanout_, 0);
@@ -352,13 +351,18 @@ KVBplusTree::KVBplusTree (Comparator *cmp, kvssd::KVSSD *kvd, int fanout, int ca
     }
 
     // background thread
-    std::thread thrd = std::thread(&KVBplusTree::bg_worker, this, this);
-    t_BG = thrd.native_handle();
-    thrd.detach();
+    for (int i = 0; i < BG_TRDS; i++) {
+        std::thread thrd = std::thread(&KVBplusTree::bg_worker, this, this);
+        pthread_t t_BG = thrd.native_handle();
+        thrd.detach();
+    }
 }
 
 KVBplusTree::~KVBplusTree () {
-    if (imm_ != NULL) bg_end.wait();
+    while (imm_q_.size() != 0) {
+        bg_end.wait();
+        bg_end.reset();
+    }
     BulkAppend(mem_, 0);
     delete mem_;
     delete root_;
@@ -367,15 +371,15 @@ KVBplusTree::~KVBplusTree () {
 }
 
 void KVBplusTree::bg_worker(KVBplusTree *tree) {
-    CondVar *cv_start = &(tree->bg_start);
     CondVar *cv_end = &(tree->bg_end);
+    std::mutex *m = &(tree->mutex_);
+    ConcurrQueue<MemNode*> *imm_q = &(tree->imm_q_);
+    MemNode *imm = NULL;
     while (true) {
-        cv_start->wait(); // wait for bg job trigger
-        tree->BulkAppend(imm_, 0); // bulk append imm_
-        delete imm_;
-        imm_ = NULL;
+        imm = imm_q->pop();
+        tree->BulkAppend(imm, 0); // bulk append imm
+        delete imm;
         cv_end->notify_all();
-        cv_start->reset();
     }
 }
 
@@ -521,20 +525,21 @@ bool KVBplusTree::Insert (Slice *key) {
 
 bool KVBplusTree::Write (WriteBatch *batch) {
     // check mem_ size
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (mem_->Size() >= MAX_MEM_SIZE && imm_ == NULL) {
-        // signal background thread bulkappend
-        imm_ = mem_;
-        mem_ = new MemNode(cmp_);
-        bg_start.notify_one();
-    }
-    else if (mem_->Size() >= MAX_MEM_SIZE && imm_ != NULL) {
-        // block all writer thread and wait for bg thread finish
-        bg_end.wait();
-        bg_end.reset();
-    }
-    else { // mem_->Size() < MAX_MEM_SIZE
-        // do nothing, release lock
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (mem_->Size() >= MAX_MEM_SIZE && imm_q_.size() < BG_TRDS) {
+            // signal background thread bulkappend
+            imm_q_.push(mem_);
+            mem_ = new MemNode(cmp_);
+        }
+        else if (mem_->Size() >= MAX_MEM_SIZE && imm_q_.size() == BG_TRDS) {
+            // block all writer thread and wait for bg thread finish
+            bg_end.wait();
+            bg_end.reset();
+        }
+        else { // mem_->Size() < MAX_MEM_SIZE
+            // do nothing, release lock
+        }
     }
     // write to mem_ is serialized
     auto it = batch->Iterator();
