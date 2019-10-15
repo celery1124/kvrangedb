@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <set>
 #include <map>
-#include <queue>
 #include <mutex>
 #include <condition_variable>
 #include <thread>
@@ -24,7 +23,6 @@
 #define MAX_MEM_SIZE 65536
 #define DEF_FANOUT 1024
 #define DEF_CACHE_ITEMS 4096
-#define BG_TRDS 4
 
 namespace kvbtree {
 
@@ -169,48 +167,13 @@ public:
 
 };
 
-template <typename T>
-class ConcurrQueue
-{
- public:
-  T pop()
-  {
-    std::unique_lock<std::mutex> mlock(mutex_);
-    while (queue_.empty())
-    {
-      cond_.wait(mlock);
-    }
-    auto item = queue_.front();
-    queue_.pop();
-    return item;
-  }
- 
-  void push(const T& item)
-  {
-    std::unique_lock<std::mutex> mlock(mutex_);
-    queue_.push(item);
-    mlock.unlock();
-    cond_.notify_one();
-  }
-
-  int size () 
-  {
-    std::unique_lock<std::mutex> mlock(mutex_);
-    return queue_.size();
-  }
- private:
-  std::queue<T> queue_;
-  std::mutex mutex_;
-  std::condition_variable cond_;
-};
-
 class KVBplusTree {
 private:
     Comparator *cmp_;
     kvssd::KVSSD* kvd_;
     std::mutex mutex_;
     MemNode *mem_;
-    ConcurrQueue<MemNode*> imm_q_;
+    MemNode *imm_;
     InternalNode *root_;
     Cache *innode_cache_;
     uint32_t level_; // Non-leaf levels
@@ -219,6 +182,7 @@ private:
     // BG thread
     CondVar bg_start;
     CondVar bg_end;
+    pthread_t t_BG;
     void bg_worker(KVBplusTree *tree);
 
     bool ReadMetaKV();
