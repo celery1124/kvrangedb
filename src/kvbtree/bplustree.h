@@ -209,7 +209,10 @@ public:
         Iterator (KVBplusTree *tree) : tree_(tree) {
             it_innode_cache_ = NewLRUCache(tree->cache_size_);
         }
-        ~Iterator () {delete leaf_;}
+        ~Iterator () {
+            delete leaf_;
+            delete it_innode_cache_;
+        }
         void Seek(Slice *key);
         void SeekToFirst();
         void Next();
