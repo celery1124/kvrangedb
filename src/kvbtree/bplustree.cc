@@ -325,7 +325,7 @@ bool KVBplusTree::ReadMetaKV() {
 }
 
 KVBplusTree::KVBplusTree (Comparator *cmp, kvssd::KVSSD *kvd, int fanout, int cache_size) 
-: cmp_(cmp), kvd_(kvd), level_(1), fanout_(fanout) {
+: cmp_(cmp), kvd_(kvd), cache_size_(cache_size), level_(1), fanout_(fanout) {
     // New index or not ? Read KVBTREE_CURRENT Record
     bool newDB = ReadMetaKV();
 
@@ -564,7 +564,7 @@ void KVBplusTree::Iterator::Seek(Slice *key) {
     int level = tree_->GetLevel();
     InternalNode *node = tree_->GetRoot();
     kvssd::KVSSD *kvd = tree_->GetDev();
-    Cache *innode_cache = tree_->innode_cache_;
+    Cache *innode_cache = it_innode_cache_;
     Slice *key_target = key;
     Slice lower_key, upper_key; // don't care upper key
        

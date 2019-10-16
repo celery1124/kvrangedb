@@ -176,6 +176,7 @@ private:
     MemNode *imm_;
     InternalNode *root_;
     Cache *innode_cache_;
+    int cache_size_;
     uint32_t level_; // Non-leaf levels
     int fanout_;
 
@@ -201,10 +202,13 @@ public:
     class Iterator {
     private: 
         KVBplusTree *tree_;
+        Cache *it_innode_cache_;
         LeafNode *leaf_;
         std::set<Slice, custom_cmp>::iterator it_;
     public:
-        Iterator (KVBplusTree *tree) : tree_(tree) {}
+        Iterator (KVBplusTree *tree) : tree_(tree) {
+            it_innode_cache_ = NewLRUCache(tree->cache_size_);
+        }
         ~Iterator () {delete leaf_;}
         void Seek(Slice *key);
         void SeekToFirst();
