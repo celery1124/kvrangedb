@@ -1,7 +1,7 @@
 # (A) Optimized mode
-# OPT ?= -O2 -DNDEBUG
+ OPT ?= -O2 -DNDEBUG
 # (B) Debug mode
- OPT ?= -g2
+# OPT ?= -g2
 
 TARGET=libkvrangedb.so
 
