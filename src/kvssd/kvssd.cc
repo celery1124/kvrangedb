@@ -208,9 +208,10 @@ namespace kvssd {
     KVSSD *kvd;
     Slice *key;
     Slice *val;
+    char *vbuf;
+    uint32_t vbuf_size;
     void (*cb) (void *) ;
     void *args;
-    Async_get_context *get_ctx;
   } Async_append_context;
 
   typedef struct {
@@ -226,6 +227,10 @@ namespace kvssd {
     if (cleanup->cb != NULL)
       cleanup->cb(cleanup->args);
 
+    free ((void *)cleanup->append_ctx->key->data());
+    free ((void *)cleanup->append_ctx->val->data());
+    delete cleanup->append_ctx->key;
+    delete cleanup->append_ctx->val;
     delete cleanup->append_ctx;
     delete cleanup;
   }
@@ -233,15 +238,14 @@ namespace kvssd {
   static void kv_append_async_callback(void *args) {
     // store new value
     Async_append_context *append_ctx = (Async_append_context *)args;
-    Async_get_context *ctx = (Async_get_context *)append_ctx->get_ctx;
     
     // append value
-    ctx->vbuf = (char *)realloc(ctx->vbuf, ctx->actual_len+append_ctx->val->size());  
-    memcpy(ctx->vbuf+ctx->actual_len, append_ctx->val->data(), append_ctx->val->size());
-    Slice new_val (ctx->vbuf, append_ctx->val->size() + ctx->actual_len);
+    append_ctx->vbuf = (char *)realloc(append_ctx->vbuf, append_ctx->vbuf_size+append_ctx->val->size());  
+    memcpy(append_ctx->vbuf+append_ctx->vbuf_size, append_ctx->val->data(), append_ctx->val->size());
+    Slice new_val (append_ctx->vbuf, append_ctx->val->size() + append_ctx->vbuf_size);
 
     Async_append_cleanup *cleanup = new Async_append_cleanup;
-    cleanup->vbuf = ctx->vbuf;
+    cleanup->vbuf = append_ctx->vbuf;
     cleanup->cb = append_ctx->cb;
     cleanup->args = append_ctx->args;
     cleanup->append_ctx = append_ctx;
@@ -257,12 +261,13 @@ namespace kvssd {
     io_ctx->kvd = this;
     io_ctx->key = (Slice *)key;
     io_ctx->val = (Slice *)val;
+    io_ctx->vbuf = NULL;
+    io_ctx->vbuf_size = 0;
     io_ctx->cb = callback;
     io_ctx->args = args;
 
-    char *vbuf; uint32_t size;
-    Async_get_context *get_ctx = new Async_get_context(vbuf, size, io_ctx);
-    io_ctx->get_ctx = get_ctx;
+    Async_get_context *get_ctx = new Async_get_context(io_ctx->vbuf, io_ctx->vbuf_size, io_ctx);
+
     return kv_get_async(key, kv_append_async_callback, get_ctx);
 
     stats_.num_append.fetch_add(1, std::memory_order_relaxed);
