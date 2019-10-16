@@ -18,6 +18,8 @@
 #include "comparator.h"
 #include "write_batch.h"
 #include "kvssd/kvssd.h"
+#include "thread-safe-lru/string-key.h"
+#include "thread-safe-lru/lru-cache.h"
 
 #define IDEAL_KV_SIZE 32768
 #define MAX_MEM_SIZE 65536
@@ -167,6 +169,9 @@ public:
 
 };
 
+typedef tstarling::ThreadSafeStringKey String;
+typedef String::HashCompare HashCompare;
+typedef tstarling::ThreadSafeLRUCache<String, InternalNode*, HashCompare> AtomicCache;
 class KVBplusTree {
 private:
     Comparator *cmp_;
@@ -176,8 +181,8 @@ private:
     MemNode *imm_;
     InternalNode *root_;
     Cache *innode_cache_;
+    std::unique_ptr<AtomicCache> concurr_cache_; // concurrent cache (for iterator only)
     int cache_size_;
-    std::mutex cache_m_;
     uint32_t level_; // Non-leaf levels
     int fanout_;
 

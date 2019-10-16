@@ -1,14 +1,14 @@
 # (A) Optimized mode
- OPT ?= -O2 -DNDEBUG
+# OPT ?= -O2 -DNDEBUG
 # (B) Debug mode
-# OPT ?= -g2
+ OPT ?= -g2
 
 TARGET=libkvrangedb.so
 
 HOME=$(shell pwd)
 CC=gcc
 INCLUDES=-I$(HOME)/include
-LIBS=-L$(HOME)/libs -Wl,-rpath,$(HOME)/libs -lrt -lpthread -lleveldb -lkvssd
+LIBS=-L$(HOME)/libs -Wl,-rpath,$(HOME)/libs -lrt -lpthread -lleveldb -lkvssd -ltbb
 CXXFLAG=-fPIC -w -march=native -std=c++11 $(OPT)
 
 DB_SRCS=$(HOME)/src/kv_index_lsm.cc $(HOME)/src/kv_index_btree.cc $(HOME)/src/kv_index_base.cc $(HOME)/src/kv_index_inmem.cc $(HOME)/src/db_impl.cc $(HOME)/src/db_iter.cc

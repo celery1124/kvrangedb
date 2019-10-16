@@ -333,6 +333,7 @@ KVBplusTree::KVBplusTree (Comparator *cmp, kvssd::KVSSD *kvd, int fanout, int ca
     mem_ = new MemNode(cmp_);
     imm_ = NULL;
     innode_cache_ = NewLRUCache(cache_size);
+    concurr_cache_ = std::unique_ptr<AtomicCache>(new AtomicCache(cache_size));
     if (newDB) {
         root_ = new InternalNode(cmp_, kvd_, NULL, fanout_, 0);
         root_->InsertEntry(&dummy, 0, 0); // add dummy head
@@ -564,8 +565,8 @@ void KVBplusTree::Iterator::Seek(Slice *key) {
     int level = tree_->GetLevel();
     InternalNode *node = tree_->GetRoot();
     kvssd::KVSSD *kvd = tree_->GetDev();
-    Cache *innode_cache = tree_->innode_cache_;
-    std::mutex *m = &(tree_->cache_m_);
+    //Cache *innode_cache = tree_->innode_cache_;
+    AtomicCache::ConstAccessor ac;
     Slice *key_target = key;
     Slice lower_key, upper_key; // don't care upper key
        
@@ -576,25 +577,37 @@ void KVBplusTree::Iterator::Seek(Slice *key) {
         
         // get next internal node
         std::string next_node_key = "level"+std::to_string(level-i-2)+lower_key.ToString();
-        Slice inner_key = Slice(next_node_key);
-        Cache::Handle *cache_handle = innode_cache->Lookup(inner_key);
-        if (cache_handle == NULL) {
+        //Slice inner_key = Slice(next_node_key);
+        //Cache::Handle *cache_handle = innode_cache->Lookup(inner_key);
+        // if (cache_handle == NULL) {
+        //     char *v_buf; int v_size;
+        //     kvssd::Slice io_key(next_node_key);
+        //     kvd->kv_get(&io_key, v_buf, v_size);
+        //     node = new InternalNode(tree_->cmp_, kvd, node, tree_->fanout_, level-i-2, v_buf, v_size);
+        //     free(v_buf);
+        //     cache_handle = innode_cache->Insert(inner_key, node, 1, DeleteCacheItem);
+        // }
+        // else {
+        //     InternalNode *parent = node;
+        //     node = (InternalNode *)innode_cache->Value(cache_handle);
+        //     node->UpdateParent(parent);
+        // }
+        // innode_cache->Release(cache_handle);
+
+        String inner_key(next_node_key.data(), next_node_key.size());
+        if(!tree_->concurr_cache_->find(ac, inner_key)) {
             char *v_buf; int v_size;
             kvssd::Slice io_key(next_node_key);
             kvd->kv_get(&io_key, v_buf, v_size);
             node = new InternalNode(tree_->cmp_, kvd, node, tree_->fanout_, level-i-2, v_buf, v_size);
             free(v_buf);
-            {
-                std::unique_lock<std::mutex> lock(*m);
-                cache_handle = innode_cache->Insert(inner_key, node, 1, DeleteCacheItem);
-            }
+            tree_->concurr_cache_->insert(inner_key, node);
         }
         else {
             InternalNode *parent = node;
-            node = (InternalNode *)innode_cache->Value(cache_handle);
+            node = *(ac.get());
             node->UpdateParent(parent);
         }
-        innode_cache->Release(cache_handle);
     }
 
     // get leaf node
