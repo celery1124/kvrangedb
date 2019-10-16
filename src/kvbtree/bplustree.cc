@@ -449,19 +449,19 @@ void KVBplusTree::BulkAppend(MemNode *mem, int MemEntriesWaterMark) {
             delete leaf_node_left;
         }
         else {
-            // std::string leaf_key_str = "leaf"+std::string(lower_key.data(), lower_key.size());
-            // kvssd::Slice leaf_key(leaf_key_str);
-            // kvssd::Slice leaf_val(mem_buf, mem_buf_size);
-            // kvd_->kv_append(&leaf_key, &leaf_val);
-
             std::string leaf_key_str = "leaf"+std::string(lower_key.data(), lower_key.size());
-            char *leaf_key_c_str = (char *)malloc(leaf_key_str.size());
-            memcpy(leaf_key_c_str, leaf_key_str.c_str(), leaf_key_str.size());
-            char *leaf_val_c_str = (char *)malloc(mem_buf_size);
-            memcpy(leaf_val_c_str, mem_buf, mem_buf_size);
-            kvssd::Slice *leaf_key = new kvssd::Slice(leaf_key_c_str, leaf_key_str.size());
-            kvssd::Slice *leaf_val = new kvssd::Slice(leaf_val_c_str, mem_buf_size);
-            kvd_->kv_append_async(leaf_key, leaf_val, NULL, NULL);
+            kvssd::Slice leaf_key(leaf_key_str);
+            kvssd::Slice leaf_val(mem_buf, mem_buf_size);
+            kvd_->kv_append(&leaf_key, &leaf_val);
+
+            // std::string leaf_key_str = "leaf"+std::string(lower_key.data(), lower_key.size());
+            // char *leaf_key_c_str = (char *)malloc(leaf_key_str.size());
+            // memcpy(leaf_key_c_str, leaf_key_str.c_str(), leaf_key_str.size());
+            // char *leaf_val_c_str = (char *)malloc(mem_buf_size);
+            // memcpy(leaf_val_c_str, mem_buf, mem_buf_size);
+            // kvssd::Slice *leaf_key = new kvssd::Slice(leaf_key_c_str, leaf_key_str.size());
+            // kvssd::Slice *leaf_val = new kvssd::Slice(leaf_val_c_str, mem_buf_size);
+            // kvd_->kv_append_async(leaf_key, leaf_val, NULL, NULL);
         }
 
         // 4, update internal node (recursive)

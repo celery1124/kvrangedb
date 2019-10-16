@@ -88,7 +88,7 @@ private:
 
 KVIndexBTree::KVIndexBTree(const Options& db_options, kvssd::KVSSD* kvd) : kvd_(kvd) {
   cmp_ = new ComparatorBTree(db_options.comparator);
-  db_ = new kvbtree::KVBplusTree(cmp_, kvd, 1024, 64);
+  db_ = new kvbtree::KVBplusTree(cmp_, kvd, 1024, 4096);
 }
 
 KVIndexBTree::~KVIndexBTree() {
