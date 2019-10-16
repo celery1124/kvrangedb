@@ -564,7 +564,8 @@ void KVBplusTree::Iterator::Seek(Slice *key) {
     int level = tree_->GetLevel();
     InternalNode *node = tree_->GetRoot();
     kvssd::KVSSD *kvd = tree_->GetDev();
-    Cache *innode_cache = it_innode_cache_;
+    Cache *innode_cache = tree_->innode_cache_;
+    std::mutex *m = &(tree_->cache_m_);
     Slice *key_target = key;
     Slice lower_key, upper_key; // don't care upper key
        
@@ -583,7 +584,10 @@ void KVBplusTree::Iterator::Seek(Slice *key) {
             kvd->kv_get(&io_key, v_buf, v_size);
             node = new InternalNode(tree_->cmp_, kvd, node, tree_->fanout_, level-i-2, v_buf, v_size);
             free(v_buf);
-            cache_handle = innode_cache->Insert(inner_key, node, 1, DeleteCacheItem);
+            {
+                std::unique_lock<std::mutex> lock(*m);
+                cache_handle = innode_cache->Insert(inner_key, node, 1, DeleteCacheItem);
+            }
         }
         else {
             InternalNode *parent = node;
