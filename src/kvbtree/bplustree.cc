@@ -560,7 +560,7 @@ void KVBplusTree::Iterator::SeekToFirst() {
 
 void KVBplusTree::Iterator::Seek(Slice *key) {
     // dump MemNode (make sure mem buffer is append in the tree)
-    tree_->BulkAppend(tree_->mem_, 0);
+    //tree_->BulkAppend(tree_->mem_, 0); // guaranteed when test in device (may affect unit test)
 
     int level = tree_->GetLevel();
     InternalNode *node = tree_->GetRoot();
