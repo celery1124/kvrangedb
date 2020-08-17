@@ -58,11 +58,17 @@ struct Options {
   // Default: false
   bool rangefilterEnabled;
 
+  // Helper record hint
+  int helperHint;
+  int helperTrainingThres;
+
   Options() : comparator(BytewiseComparator()),
               indexType(LSM),
               prefetchEnabled(false),
               prefetchDepth(16),
-              rangefilterEnabled(false) {
+              rangefilterEnabled(false),
+              helperHint(0),
+              helperTrainingThres(10) {
     // Load from environment variable
     char *env_p;
     if(env_p = std::getenv("INDEX_TYPE")) {
@@ -95,7 +101,19 @@ struct Options {
       else
         rangefilterEnabled = false;
     }
-      
+    
+    if (env_p = std::getenv("HELPER_HINT")) {
+      if (strcmp(env_p, "training") == 0 || strcmp(env_p, "train") == 0)
+        helperHint = 1;
+      else if (strcmp(env_p, "infer") == 0 || strcmp(env_p, "INFER") == 0)
+        helperHint = 2;
+      else 
+        helperHint = 0;
+    }
+
+    if (env_p = std::getenv("HELPER_TRAINING_THRES")) {
+      helperTrainingThres = atoi(env_p);
+    }
   };
 };
 

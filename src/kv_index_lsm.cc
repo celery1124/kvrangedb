@@ -135,6 +135,8 @@ KVIndexLSM::KVIndexLSM(const Options& db_options, kvssd::KVSSD* kvd) : kvd_(kvd)
   options.filter_policy = NULL;
   options.compression = leveldb::kNoCompression;
   options.reuse_logs = false;
+  //options.write_buffer_size = 128 << 10;
+  //options.max_file_size = 128 << 10;
   options.write_buffer_size = 1 << 20;
   options.max_file_size = 1 << 20;
 

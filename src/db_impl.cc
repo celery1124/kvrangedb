@@ -10,6 +10,11 @@
 #include "db_impl.h"
 #include "db_iter.h"
 
+extern int hitCnt;
+extern double hitCost;
+extern double missCost;
+extern double hitNextCost;
+extern double missNextCost;
 namespace kvrangedb {
 
 static void on_io_complete(void *args) {
@@ -39,6 +44,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 DBImpl::~DBImpl() {
   delete key_idx_;
 	delete kvd_;
+  printf("hitCnt = %d\n", hitCnt);
+  printf("hitCost = %.3f, missCost = %.3f\n", hitCost, missCost);
+  printf("hitNextCost = %.3f, missNextCost = %.3f\n", hitNextCost, missNextCost);
 }
 
 Status DBImpl::Put(const WriteOptions& options,

@@ -5,11 +5,23 @@
 */
 #include <mutex>
 #include <condition_variable>
+#include <unordered_map>
 #include "kvrangedb/iterator.h"
 #include "db_impl.h"
 #include "db_iter.h"
+#include "kvssd/kvssd.h"
 
+#include <ctime>
+#include <chrono>
+
+int hitCnt = 0;
+double hitCost = 0;
+double missCost = 0;
+double hitNextCost = 0;
+double missNextCost = 0;
 namespace kvrangedb {
+
+std::unordered_map<std::string, int> scan_queryKey_;
 
 typedef struct {
   std::mutex *m;
@@ -58,12 +70,20 @@ private:
   int prefetch_depth_;
   int queue_cur_;
 
+  // pack key range
+  bool isPacked_;
+  std::string packedKVs_;
+  std::string helper_key_;
+  int packedIdx_;
+  Slice isPackedCurrKey_;
+  Slice isPackedCurrVal_;
+
   void prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>& val_list);
 };
 
 DBIterator::DBIterator(DBImpl *db, const ReadOptions &options) 
 : db_(db), options_(options), kvd_(db->GetKVSSD()), valid_(false),
-  prefetch_depth_(1), queue_cur_(0) {
+  prefetch_depth_(1), queue_cur_(0), isPacked_(false), packedIdx_(0) {
   if (db_->options_.prefetchEnabled) {
     int prefetch_depth = db_->options_.prefetchDepth;
     key_queue_ = new std::string[prefetch_depth];
@@ -75,12 +95,24 @@ DBIterator::DBIterator(DBImpl *db, const ReadOptions &options)
 }
 
 DBIterator::~DBIterator() { 
+  // write packed key range
+  if (helper_key_.size() > 0 ) {
+    std::string helper_key = helper_key_+"helper";
+    kvssd::Slice put_key(helper_key.data(), helper_key.size());
+    kvssd::Slice put_val(packedKVs_.data(), packedKVs_.size());
+
+    kvd_->kv_store(&put_key, &put_val);
+    scan_queryKey_[helper_key_] = -1;
+    printf("write packed key range, start key: %s, total size: %d\n", helper_key.c_str(), packedKVs_.size());
+  }
   delete it_; 
 
   if (db_->options_.prefetchEnabled) {
     delete [] key_queue_;
     for (int i = 0 ; i < db_->options_.prefetchDepth; i++) {
-      if (val_queue_[i].size() != 0) free((void *)val_queue_[i].data());
+      if (val_queue_[i].size() != 0) {
+        if (val_queue_[i].size() > 0) free((void *)val_queue_[i].data());
+      }
     }
     delete [] val_queue_;
     delete [] valid_queue_;
@@ -126,7 +158,44 @@ void DBIterator::SeekToFirst() {
   }
 }
 
+static bool isHelperKV(char *vbuf, int vlen) {
+  assert(vlen >= sizeof(int));
+  int *header = (int*)vbuf;
+  return (*header) == 0xA5A5A5A5;
+}
+
 void DBIterator::Seek(const Slice& target) { 
+  auto wcts = std::chrono::system_clock::now();
+  // training helper record
+  if (db_->options_.helperHint == 1) {
+    std::string queryKey (target.data(), target.size());
+    if (scan_queryKey_[queryKey] >= 0) scan_queryKey_[queryKey]++;
+    if (scan_queryKey_[queryKey] >= db_->options_.helperTrainingThres) {
+      helper_key_ = queryKey;
+      int header = 0xA5A5A5A5;
+      packedKVs_.append((char*)&header, sizeof(int));
+    }
+  }
+  else if (db_->options_.helperHint == 2) { // infer phases
+    // get helper I/O
+    std::string helper_key = std::string(target.data(), target.size()) + "helper";
+    kvssd::Slice probe_key(helper_key);
+    char *vbuf;
+    int vlen;
+    kvs_result ret;
+    ret = kvd_->kv_get(&probe_key, vbuf, vlen);
+    bool helperHit = (ret!=KVS_ERR_KEY_NOT_EXIST) && isHelperKV(vbuf, vlen);
+    if (helperHit) { // fast path
+      packedKVs_.append(vbuf+sizeof(int), vlen-sizeof(int));
+      isPacked_ = true;
+      valid_ = true;
+      hitCnt++;
+      std::chrono::duration<double, std::micro> hitduration = (std::chrono::system_clock::now() - wcts);
+      hitCost += hitduration.count();
+      return;
+    }
+  }
+  
   it_->Seek(target); 
   if (db_->options_.prefetchEnabled) {
     valid_ = valid_queue_[0] = it_->Valid();
@@ -136,11 +205,34 @@ void DBIterator::Seek(const Slice& target) {
   else {
     valid_ = it_->Valid();
   }
+  
+  std::chrono::duration<double, std::micro> missduration = (std::chrono::system_clock::now() - wcts);
+  missCost += missduration.count();
 }
 
 void DBIterator::Next() {
+  auto wcts = std::chrono::system_clock::now();
   assert(valid_);
-  if (db_->options_.prefetchEnabled) {
+  if (isPacked_) {
+    auto wcts = std::chrono::system_clock::now();
+    if (packedIdx_ >= packedKVs_.size()) {
+      valid_ = false;
+      return;
+    }
+    int klen;
+    int vlen;
+    memcpy(&klen, &packedKVs_[packedIdx_], sizeof(int));
+    packedIdx_ += sizeof(int);
+    isPackedCurrKey_ = Slice(&packedKVs_[packedIdx_], klen);
+    packedIdx_ += klen;
+    memcpy(&vlen, &packedKVs_[packedIdx_], sizeof(int));
+    packedIdx_ += sizeof(int);
+    isPackedCurrVal_ = Slice(&packedKVs_[packedIdx_], vlen);
+    packedIdx_ += vlen;
+    std::chrono::duration<double, std::micro> duration = (std::chrono::system_clock::now() - wcts);
+    hitNextCost += duration.count();
+  }
+  else if (db_->options_.prefetchEnabled) {
     if (queue_cur_ == prefetch_depth_-1) {
       queue_cur_ = 0; //reset cursor
       // release allocated memory vbuf
@@ -170,16 +262,22 @@ void DBIterator::Next() {
       queue_cur_++;
     
     valid_ = valid_queue_[queue_cur_];
+    std::chrono::duration<double, std::micro> duration = (std::chrono::system_clock::now() - wcts);
+    missNextCost += duration.count();
   }
   else {
     it_->Next();
     valid_ = it_->Valid();
   }
+  
 }
 
 Slice DBIterator::key() const {
   assert(valid_);
-  if (db_->options_.prefetchEnabled)
+  if (isPacked_) {
+    return isPackedCurrKey_;
+  }
+  else if (db_->options_.prefetchEnabled)
     return Slice(key_queue_[queue_cur_]);
   else
     return it_->key();
@@ -187,7 +285,11 @@ Slice DBIterator::key() const {
 
 Slice DBIterator::value() {
   assert(valid_);
-  if (db_->options_.prefetchEnabled) {
+  
+  if (isPacked_) {
+    return isPackedCurrVal_;
+  }
+  else if (db_->options_.prefetchEnabled) {
     if (queue_cur_ == 0) {// do prefetch_value
       std::vector<Slice> key_list;
       std::vector<Slice> val_list;
@@ -213,6 +315,14 @@ Slice DBIterator::value() {
       }
 
     }
+    if (helper_key_.size() > 0 ) {
+      int klen = key_queue_[queue_cur_].size();
+      int vlen = val_queue_[queue_cur_].size();
+      packedKVs_.append((char*)&klen, sizeof(int));
+      packedKVs_.append(key_queue_[queue_cur_]);
+      packedKVs_.append((char*)&vlen, sizeof(int));
+      packedKVs_.append(val_queue_[queue_cur_].ToString());
+    }
     return val_queue_[queue_cur_];
   }
   else {
@@ -224,6 +334,15 @@ Slice DBIterator::value() {
     value_.clear();
     value_.append(vbuf, vlen);
     free(vbuf);
+
+    if (helper_key_.size() > 0 ) {
+      int klen = curr_key.size();
+      int vlen = vlen;
+      packedKVs_.append((char*)&klen, sizeof(int));
+      packedKVs_.append(curr_key.data(), curr_key.size());
+      packedKVs_.append((char*)&vlen, sizeof(int));
+      packedKVs_.append(vbuf, vlen);
+    }
     return Slice(value_);
   }
 

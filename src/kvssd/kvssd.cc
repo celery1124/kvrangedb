@@ -1,4 +1,5 @@
 #include "kvssd/kvssd.h"
+#include <string>
 #define ITER_BUFF 32768
 #define INIT_GET_BUFF 65536 // 64KB
 
@@ -94,7 +95,7 @@ namespace kvssd {
     kvs_result ret = kvs_store_tuple(cont_handle, &kvskey, &kvsvalue, &put_ctx);
 
     if (ret != KVS_SUCCESS) {
-        printf("STORE tuple failed with err %s\n", kvs_errstr(ret));
+        printf("STORE tuple failed with err %s, key %s\n", kvs_errstr(ret), std::string(key->data(), key->size()).c_str());
         exit(1);
     }
     stats_.num_store.fetch_add(1, std::memory_order_relaxed);
