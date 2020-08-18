@@ -820,6 +820,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
   // Check for iterator errors
   Status s = input->status();
+  assert(s.ok());
   const uint64_t current_entries = compact->builder->NumEntries();
   if (s.ok()) {
     s = compact->builder->Finish();

@@ -13,7 +13,7 @@
 
 namespace leveldb {
 
-/*****  KVSSDEnvOpt  *****/
+/*****  KVSSDEnv  *****/
 class KVSequentialFile: public SequentialFile {
  private:
   std::string filename_;
@@ -67,6 +67,7 @@ class KVRandomAccessFile: public RandomAccessFile {
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
     Status s;
+    //fprintf(stderr, "read %s, offset %d, n %d\n", filename_.c_str(), offset, n);
     if (offset + n > length_) { // return rest of the region
       *result = Slice(reinterpret_cast<char*>(mapped_region_) + offset, length_ - offset);
       //s = IOError(filename_, EINVAL);
@@ -117,6 +118,7 @@ class KVWritableFile : public WritableFile {
     kvd_->kv_store(&key, &val);
     synced = true;
     //printf("KVWritable: %s, size %d bytes\n",filename_.c_str(), val.size());
+    //fprintf(stderr, "KVWritable: %s, size %d bytes\n",filename_.c_str(), val.size());
     return Status::OK();
   }
 };
@@ -195,6 +197,7 @@ class KVSSDEnv : public EnvWrapper {
     kvssd::Slice key (fname);
     kvd_->kv_get(&key, base, size);
     *result = new KVRandomAccessFile (fname, base, size);
+    //fprintf(stderr, "%s, %d\n", fname.c_str(), size);
     return Status::OK();
   }
 
@@ -322,16 +325,18 @@ public:
 struct AsyncStore_context {
   Monitor *mon;
   std::string *keyStr;
+  std::string *valStr;
   kvssd::Slice *key;
   kvssd::Slice *val;
-  AsyncStore_context(Monitor *_mon, std::string *_keyStr, kvssd::Slice *_key, kvssd::Slice *_val) :
-  mon(_mon), keyStr(_keyStr), key(_key), val(_val) {}
+  AsyncStore_context(Monitor *_mon, std::string *_keyStr, std::string *_valStr, kvssd::Slice *_key, kvssd::Slice *_val) :
+  mon(_mon), keyStr(_keyStr), valStr(_valStr), key(_key), val(_val) {}
 };
 
 static void kv_store_async_cb (void *args) {
     AsyncStore_context *ctx = (AsyncStore_context *)args;
     ctx->mon->notify();
     delete ctx->keyStr;
+    delete ctx->valStr;
     delete ctx->key;
     delete ctx->val;
     delete ctx;
@@ -391,10 +396,19 @@ class KVRandomAccessFileOpt: public RandomAccessFile {
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
+    //fprintf(stderr, "read %s, offset %d, n %d\n", filename_.c_str(), offset, n);
     if (offset < data_length_) { // read data block
       std::string dblk_name = filename_+'/'+std::to_string(offset);
       kvssd::Slice key (dblk_name);
-      kvd_->kv_get_oneshot(&key, scratch, n);
+      //kvd_->kv_get_oneshot(&key, scratch, n);
+      char *base;
+      int size; 
+      size_t align = 4; // 4 byte alignment (kvssd retrieve required!)
+      int kvd_ret = kvd_->kv_get(&key, base, size, (n + (align - 1)) & ~(align - 1));
+      assert(kvd_ret == 0);
+      assert(size == n);
+      memcpy(scratch, base, n);
+      free(base);
       *result = Slice(scratch, n);
     }
     else { // read meta block
@@ -430,6 +444,7 @@ class KVWritableFileOpt : public WritableFile {
   }
 
   virtual Status Close() {
+    assert(value_.size() == 0);
     return Status::OK();
   }
 
@@ -437,15 +452,16 @@ class KVWritableFileOpt : public WritableFile {
     // write block
     std::string *keyStr = new std::string;
     *keyStr += (filename_+'/'+std::to_string(offset_));
+    std::string *valStr = new std::string;
+    valStr->swap(value_);
     kvssd::Slice *key = new kvssd::Slice (*keyStr);
-    kvssd::Slice *val = new kvssd::Slice (value_);
+    kvssd::Slice *val = new kvssd::Slice (*valStr);
     Monitor *mon = new Monitor;
-    AsyncStore_context *ctx = new AsyncStore_context(mon, keyStr, key, val);
+    AsyncStore_context *ctx = new AsyncStore_context(mon, keyStr, valStr, key, val);
     kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
     monList_.push_back(mon);
 
-    offset_ += value_.size();
-    value_.clear();
+    offset_ += valStr->size();
     return Status::OK();
   }
 
@@ -456,15 +472,17 @@ class KVWritableFileOpt : public WritableFile {
     value_.append(buf, sizeof(buf));
     std::string *keyStr = new std::string;
     *keyStr += (filename_+"/meta");
+    std::string *valStr = new std::string;
+    valStr->swap(value_);
     kvssd::Slice *key = new kvssd::Slice (*keyStr);
-    kvssd::Slice *val = new kvssd::Slice (value_);
+    kvssd::Slice *val = new kvssd::Slice (*valStr);
     Monitor *mon = new Monitor;
-    AsyncStore_context *ctx = new AsyncStore_context(mon, keyStr, key, val);
+    AsyncStore_context *ctx = new AsyncStore_context(mon, keyStr, valStr, key, val);
     kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
+    //kvd_->kv_store(key, val);
     monList_.push_back(mon);
 
-    offset_ += value_.size();
-    value_.clear();
+    offset_ += valStr->size();
     return Status::OK();
   }
 
@@ -475,7 +493,9 @@ class KVWritableFileOpt : public WritableFile {
     // Wait until all async I/O finish
     for (auto it = monList_.begin(); it != monList_.end(); ++it) {
       (*it)->wait();
+      delete (*it);
     }
+    //fprintf(stderr, "KVWritable: %s, size %d bytes\n",filename_.c_str(), offset_);
     return Status::OK();
   }
 };
@@ -554,9 +574,11 @@ class KVSSDEnvOpt : public EnvWrapper {
     // read meta KV on NewRandomAccessFile construction
     std::string meta_name = fname+"/meta";
     kvssd::Slice key (meta_name);
-    kvd_->kv_get(&key, base, size, 16<<10 /*16KB*/);
+    int kvd_ret = kvd_->kv_get(&key, base, size, 16<<10 /*16KB*/);
+    assert(kvd_ret == 0);
     // read footer for data block size
     dataLen = DecodeFixed32(base+size-sizeof(uint32_t));
+    //fprintf(stderr, "%s, %d\n", fname.c_str(), dataLen + size - sizeof(uint32_t));
     *result = new KVRandomAccessFileOpt (kvd_, fname, base, size, dataLen);
     return Status::OK();
   }
