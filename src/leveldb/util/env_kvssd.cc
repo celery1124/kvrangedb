@@ -319,9 +319,20 @@ public:
   }
 };
 
+struct AsyncStore_context {
+  Monitor *mon;
+  kvssd::Slice *key;
+  kvssd::Slice *val;
+  AsyncStore_context(Monitor *_mon, kvssd::Slice *_key, kvssd::Slice *_val) :
+  mon(_mon), key(_key), val(_val) {}
+};
+
 static void kv_store_async_cb (void *args) {
-    Monitor *mon = (Monitor *)args;
-    mon->notify();
+    AsyncStore_context *ctx = (AsyncStore_context *)args;
+    ctx->mon->notify();
+    delete ctx->key;
+    delete ctx->val;
+    delete ctx;
 }
 
 class KVSequentialFileOpt: public SequentialFile {
@@ -422,10 +433,11 @@ class KVWritableFileOpt : public WritableFile {
 
   virtual Status Flush() {
     // write block
-    kvssd::Slice key (filename_+'/'+std::to_string(offset_));
-    kvssd::Slice val (value_);
+    kvssd::Slice *key = new kvssd::Slice (filename_+'/'+std::to_string(offset_));
+    kvssd::Slice *val = new kvssd::Slice (value_);
     Monitor *mon = new Monitor;
-    kvd_->kv_store_async(&key, &val, kv_store_async_cb, (void*)mon);
+    AsyncStore_context *ctx = new AsyncStore_context(mon, key, val);
+    kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
     monList_.push_back(mon);
 
     offset_ += value_.size();
