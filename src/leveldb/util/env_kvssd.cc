@@ -553,7 +553,8 @@ class KVSSDEnvOpt : public EnvWrapper {
     char * base;
     int size, dataLen;
     // read meta KV on NewRandomAccessFile construction
-    kvssd::Slice key (fname+"/meta");
+    std::string meta_name = fname+"/meta";
+    kvssd::Slice key (meta_name);
     kvd_->kv_get(&key, base, size, 16<<10 /*16KB*/);
     // read footer for data block size
     dataLen = DecodeFixed32(base+size-sizeof(uint32_t));
