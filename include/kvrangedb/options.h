@@ -19,6 +19,7 @@ class Slice;
 
 enum IndexType {
   LSM,
+  LSMOPT,
   BTREE,
   BASE,
 	INMEM
@@ -79,6 +80,8 @@ struct Options {
     if(env_p = std::getenv("INDEX_TYPE")) {
       if (strcmp(env_p, "LSM") == 0)
         indexType = LSM;
+      else if (strcmp(env_p, "LSMOPT") == 0)
+        indexType = LSMOPT;
       else if (strcmp(env_p, "BTREE") == 0)
         indexType = BTREE;
       else if (strcmp(env_p, "BASE") == 0)

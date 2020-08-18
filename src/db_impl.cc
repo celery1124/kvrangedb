@@ -27,6 +27,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   kvd_ = new kvssd::KVSSD(dbname.c_str());
   if (options.indexType == LSM)
 	  key_idx_ = NewLSMIndex(options, kvd_);
+  else if (options.indexType == LSMOPT)
+    key_idx_ = NewLSMIndex(options, kvd_);
   else if (options.indexType == BTREE)
     key_idx_ = NewBTreeIndex(options, kvd_);
   else if (options.indexType == BASE) {
