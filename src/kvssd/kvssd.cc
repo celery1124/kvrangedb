@@ -1,7 +1,6 @@
 #include "kvssd/kvssd.h"
 #include <string>
 #define ITER_BUFF 32768
-#define INIT_GET_BUFF 65536 // 64KB
 
 namespace kvssd {
 
@@ -274,10 +273,25 @@ namespace kvssd {
     stats_.num_append.fetch_add(1, std::memory_order_relaxed);
   }
 
-  kvs_result KVSSD::kv_get(const Slice *key, char*& vbuf, int& vlen) {
-    vbuf = (char *) malloc(INIT_GET_BUFF);
+  kvs_result KVSSD::kv_get_oneshot(const Slice *key, char* vbuf, int vlen) {
+    // vbuf already allocated, read in 1 I/O
     const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size() };
-    kvs_value kvsvalue = { vbuf, INIT_GET_BUFF , 0, 0 /*offset */}; //prepare initial buffer
+    kvs_value kvsvalue = { vbuf, vlen , 0, 0 /*offset */}; //prepare initial buffer
+    kvs_retrieve_option option;
+    memset(&option, 0, sizeof(kvs_retrieve_option));
+    option.kvs_retrieve_decompress = false;
+    option.kvs_retrieve_delete = false;
+    const kvs_retrieve_context ret_ctx = {option, 0, 0};
+    kvs_result ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
+    //printf("[kv_get] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), vlen);
+    assert(vlen == kvsvalue.actual_value_size);
+    return ret;
+  }
+
+  kvs_result KVSSD::kv_get(const Slice *key, char*& vbuf, int& vlen, int init_size /* default = INIT_GET_BUFF */) {
+    vbuf = (char *) malloc(init_size);
+    const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size() };
+    kvs_value kvsvalue = { vbuf, init_size , 0, 0 /*offset */}; //prepare initial buffer
     kvs_retrieve_option option;
     memset(&option, 0, sizeof(kvs_retrieve_option));
     option.kvs_retrieve_decompress = false;
@@ -289,14 +303,14 @@ namespace kvssd {
     }
     //if (ret == KVS_ERR_BUFFER_SMALL) { // do anther IO KVS_ERR_BUFFER_SMALL not working
     vlen = kvsvalue.actual_value_size;
-    if (INIT_GET_BUFF < vlen) {
+    if (init_size < vlen) {
       // implement own aligned_realloc
       char *realloc_vbuf = (char *) malloc(vlen + 4 - (vlen%4));
-      memcpy(realloc_vbuf, vbuf, INIT_GET_BUFF);
+      memcpy(realloc_vbuf, vbuf, init_size);
       free(vbuf); vbuf = realloc_vbuf;
       kvsvalue.value = vbuf;
       kvsvalue.length = vlen + 4 - (vlen%4);
-      kvsvalue.offset = INIT_GET_BUFF; // skip the first IO buffer (not support, actually read whole value)
+      kvsvalue.offset = init_size; // skip the first IO buffer (not support, actually read whole value)
       ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
 
       stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);

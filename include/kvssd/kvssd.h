@@ -11,6 +11,8 @@
 #include "slice.h"
 #include "kvs_api.h"
 
+#define INIT_GET_BUFF 65536 // 64KB
+
 namespace kvssd {
 
 typedef struct {
@@ -73,7 +75,8 @@ typedef struct {
       kvs_result kv_append(const Slice *key, const Slice *val);
       kvs_result kv_append_async(const Slice *key, const Slice *val, void (*callback)(void *), void *args);
       // caller must free vbuf memory
-      kvs_result kv_get(const Slice *key, char*& vbuf, int& vlen);
+      kvs_result kv_get_oneshot(const Slice *key, char* vbuf, int vlen);
+      kvs_result kv_get(const Slice *key, char*& vbuf, int& vlen, int init_size = INIT_GET_BUFF);
       kvs_result kv_get_async(const Slice *key, void (*callback)(void *), void *args);
       kvs_result kv_pget(const Slice *key, char*& vbuf, int count, int offset);
       kvs_result kv_delete(const Slice *key);

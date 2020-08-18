@@ -144,7 +144,7 @@ KVIndexLSM::KVIndexLSM(const Options& db_options, kvssd::KVSSD* kvd) : kvd_(kvd)
   cmp_ = new ComparatorLSM(db_options.comparator);
   options.comparator = cmp_;
 
-  options.env = leveldb::NewKVEnv(leveldb::Env::Default(), kvd);
+  options.env = leveldb::NewKVEnvOpt(leveldb::Env::Default(), kvd);
   leveldb::Status status = leveldb::DB::Open(options, "", &db_);
 }
 

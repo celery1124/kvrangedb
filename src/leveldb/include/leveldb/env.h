@@ -168,6 +168,7 @@ class Env {
 };
 
 Env* NewKVEnv(Env* base_env, kvssd::KVSSD* kvd);
+Env* NewKVEnvOpt(Env* base_env, kvssd::KVSSD* kvd);
 
 // A file abstraction for reading sequentially through a file
 class SequentialFile {
