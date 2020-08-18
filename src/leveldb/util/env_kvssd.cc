@@ -112,13 +112,12 @@ class KVWritableFile : public WritableFile {
   virtual Status Sync() {
     // Ensure new files referred to by the manifest are in the filesystem.
     //Status s = SyncDirIfManifest();
-    Status s;
     kvssd::Slice key (filename_);
     kvssd::Slice val (value_);
     kvd_->kv_store(&key, &val);
     synced = true;
     //printf("KVWritable: %s, size %d bytes\n",filename_.c_str(), val.size());
-    return s;
+    return Status::OK();
   }
 };
 
@@ -127,10 +126,11 @@ class KVAppendableFile : public WritableFile {
   std::string filename_;
   std::string value_;
   kvssd::KVSSD* kvd_;
+  bool synced;
 
  public:
   KVAppendableFile(kvssd::KVSSD* kvd, const std::string& fname)
-      : filename_(fname), kvd_(kvd){  }
+      : filename_(fname), kvd_(kvd), synced(false) {  }
 
   ~KVAppendableFile() { }
 
@@ -141,6 +141,7 @@ class KVAppendableFile : public WritableFile {
   }
 
   virtual Status Close() {
+    if (!synced) Sync();
     return Status::OK();
   }
 
@@ -151,12 +152,12 @@ class KVAppendableFile : public WritableFile {
   virtual Status Sync() {
     // Ensure new files referred to by the manifest are in the filesystem.
     //Status s = SyncDirIfManifest();
-    Status s;
     kvssd::Slice key (filename_);
     kvssd::Slice val (value_);
     kvd_->kv_append(&key, &val);
     //printf("append: %s\n",filename_.c_str());
-    return s;
+    synced = true;
+    return Status::OK();
   }
 };
 
@@ -460,10 +461,11 @@ class KVAppendableFileOpt : public WritableFile {
   std::string filename_;
   std::string value_;
   kvssd::KVSSD* kvd_;
+  bool synced;
 
  public:
   KVAppendableFileOpt(kvssd::KVSSD* kvd, const std::string& fname)
-      : filename_(fname), kvd_(kvd){  }
+      : filename_(fname), kvd_(kvd), synced(false) {  }
 
   ~KVAppendableFileOpt() { }
 
@@ -474,6 +476,7 @@ class KVAppendableFileOpt : public WritableFile {
   }
 
   virtual Status Close() {
+    if (!synced) Sync();
     return Status::OK();
   }
 
@@ -484,12 +487,12 @@ class KVAppendableFileOpt : public WritableFile {
   virtual Status Sync() {
     // Ensure new files referred to by the manifest are in the filesystem.
     //Status s = SyncDirIfManifest();
-    Status s;
     kvssd::Slice key (filename_);
     kvssd::Slice val (value_);
     kvd_->kv_append(&key, &val);
     //printf("append: %s\n",filename_.c_str());
-    return s;
+    synced = true;
+    return Status::OK();
   }
 };
 
