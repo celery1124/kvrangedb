@@ -1,4 +1,4 @@
-/******* kvrangedb *******/
+
 /* db_test.cc
 * 07/29/2019
 * by Mian Qin
@@ -10,12 +10,18 @@
 #include <assert.h>
 #include <unistd.h>
 #include <thread>
+#include <map>
+#include <ctime>
+#include <chrono>
+#include <iostream>
 
 #include "kvrangedb/slice.h"
 #include "kvrangedb/comparator.h"
 #include "kvrangedb/db.h"
 
 #define OBJ_LEN 1024
+
+std::map<std::string, std::string> groundTruth;
 
 class Random {
  private:
@@ -106,6 +112,7 @@ void DoWrite(kvrangedb::DB *db, int num, bool seq) {
 
         db->Put(wropts, key, val);
         //printf("[insert] key %s, val %s\n", key, std::string(value, 8).c_str());
+        groundTruth[std::string(key, 16)] = std::string(value, 8).c_str();
     }
 }
 
@@ -134,14 +141,17 @@ void RandomRead(kvrangedb::DB *db, int num) {
       std::string val;
       db->Get(rdopts, key, &val);
       printf("[get] key %s, val %s, val_len %d\n", key, val.substr(0,8).c_str(), val.size());
+ 
+      printf("[truth] key %s, val %s, val_len %d\n", key, groundTruth[std::string(key, 16)].c_str(), val.size());
   }
 }
 
-void RandomSeek(kvrangedb::DB *db, int num) {
+void RandomSeek(kvrangedb::DB *db, int num, int seed) {
   kvrangedb::ReadOptions rdopts;
   int found = 0;
-  Random rand(2019);
-  for (int i = 0; i < num; i++) {
+  int seek_num = 10;
+  Random rand(seed);
+  for (int i = 0; i < seek_num; i++) {
     kvrangedb::Iterator* iter = db->NewIterator(rdopts);
     char key[100];
     const int k = (rand.Next() % num);
@@ -153,23 +163,35 @@ void RandomSeek(kvrangedb::DB *db, int num) {
     printf("Seek %d, Get key %s, value %s\n", k, iter->key().ToString().c_str(), std::string(val.data(), 8).c_str());
 
     delete iter;
+    
+    auto itlow=groundTruth.lower_bound (std::string(key, 16));
+    printf("Seek %d, Truth key %s, value %s\n", k, itlow->first.c_str(), itlow->second.c_str());
   }
-  printf("%d out of %d keys found\n", found, num);
+  printf("%d out of %d keys found\n", found, seek_num);
 
 }
 
-void DoScan(kvrangedb::DB *db, int scan_len) {
+void DoScan(kvrangedb::DB *db, int num) {
   kvrangedb::ReadOptions rdopts;
-  Random rand(2019);
+  Random rand(2020);
   kvrangedb::Iterator* iter = db->NewIterator(rdopts);
+  int scan_len = 10;
   
-  iter->SeekToFirst();
+  char key[100] = {0};
+  const int k = (rand.Next() % num);
+  snprintf(key, sizeof(key), "%016d", k);
+  //iter->SeekToFirst();
+  iter->Seek(key);
   int i = 0;
+  printf("Scan start key %s\n", key);
+  auto itlow=groundTruth.lower_bound (std::string(key, 16));
   while(iter->Valid() && scan_len > 0) {
     kvrangedb::Slice val = iter->value();
-    printf("#%d, Get key %s, value %s\n", ++i, iter->key().ToString().c_str(), std::string(val.data(), 8).c_str());
+    printf("[Scan] #%d, Get key %s, value %s\n", ++i, iter->key().ToString().c_str(), std::string(val.data(), 8).c_str());
+    printf("[Scan] #%d, Truth key %s, value %s\n", i, itlow->first.c_str(), itlow->second.c_str());
 
     iter->Next();
+    ++itlow;
     scan_len--;
   }
   delete iter;
@@ -185,7 +207,7 @@ public:
 };
 
 int main () {
-  int num = 10000;
+  int num = 330000;
   int thread_cnt = 1;
 
   CustomComparator cmp;
@@ -197,30 +219,32 @@ int main () {
   //kvrangedb::DB::Open(options, "/dev/kvemul", &db);
   kvrangedb::DB::Open(options, "/dev/nvme0n1", &db);
 
+  auto wcts = std::chrono::system_clock::now();
   DoWrite(db, num, 0);
+  std::chrono::duration<double> wctduration = (std::chrono::system_clock::now() - wcts);
 
   sleep(1); // wait for write done
   // db->close_idx(); // close db index
-
   // // open db index again
   // db->open_idx();
 
   RandomRead(db, num);
 
   std::thread *th_seek[16];
-  RandomSeek(db, 10);
+  RandomSeek(db, num, 2019);
   for (int i = 0; i< thread_cnt; i++) {
-    th_seek[i] = new std::thread(RandomSeek, db, 10);
+    th_seek[i] = new std::thread(RandomSeek, db, num, i);
   }
   for (int i = 0; i< thread_cnt; i++) {
     th_seek[i]->join();
   }
-  DoScan(db, 10);
 
-  delete db;
+  DoScan(db, num);
   for (int i = 0; i< thread_cnt; i++) {
     delete th_seek[i];
   }
-
+  
+  std::cout << "DoWrite finished in " << wctduration.count() << " seconds [Wall Clock]" << std::endl;
+  delete db;
   return 0;
 }
