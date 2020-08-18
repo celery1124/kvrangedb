@@ -41,7 +41,7 @@ static Status DoWriteStringToFile(Env* env, const Slice& data,
                                   const std::string& fname,
                                   bool should_sync) {
   WritableFile* file;
-  Status s = env->NewWritableFile(fname, &file);
+  Status s = env->NewAppendableFile(fname, &file);
   if (!s.ok()) {
     return s;
   }

@@ -185,7 +185,7 @@ Status DBImpl::NewDB() {
 
   const std::string manifest = DescriptorFileName(dbname_, 1);
   WritableFile* file;
-  Status s = env_->NewWritableFile(manifest, &file);
+  Status s = env_->NewAppendableFile(manifest, &file);
   if (!s.ok()) {
     return s;
   }
