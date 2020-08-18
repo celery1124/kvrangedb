@@ -391,7 +391,7 @@ class KVRandomAccessFileOpt: public RandomAccessFile {
                       char* scratch) const {
     if (offset < data_length_) { // read data block
       *result = NULL;
-      kvssd::Slice key (filename_+std::to_string(offset));
+      kvssd::Slice key (filename_+'/'+std::to_string(offset));
       kvd_->kv_get_oneshot(&key, scratch, n);
       *result = Slice(scratch, n);
     }
@@ -450,10 +450,11 @@ class KVWritableFileOpt : public WritableFile {
     char buf[sizeof(offset_)];
     EncodeFixed32(buf, offset_);
     value_.append(buf, sizeof(buf));
-    kvssd::Slice key (filename_+"/meta");
-    kvssd::Slice val (value_);
+    kvssd::Slice *key = new kvssd::Slice (filename_+"/meta");
+    kvssd::Slice *val = new kvssd::Slice (value_);
     Monitor *mon = new Monitor;
-    kvd_->kv_store_async(&key, &val, kv_store_async_cb, (void*)mon);
+    AsyncStore_context *ctx = new AsyncStore_context(mon, key, val);
+    kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
     monList_.push_back(mon);
 
     offset_ += value_.size();
