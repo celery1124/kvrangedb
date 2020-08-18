@@ -135,8 +135,12 @@ class KVAppendableFile : public WritableFile {
   ~KVAppendableFile() { }
 
   virtual Status Append(const Slice& data) {
-    value_.clear();
     value_.append(data.data(), data.size());
+    return Status::OK();
+  }
+
+  virtual Status Reset() {
+    value_.clear();
     return Status::OK();
   }
 
@@ -154,7 +158,8 @@ class KVAppendableFile : public WritableFile {
     //Status s = SyncDirIfManifest();
     kvssd::Slice key (filename_);
     kvssd::Slice val (value_);
-    kvd_->kv_append(&key, &val);
+    kvd_->kv_store(&key, &val);
+    //kvd_->kv_append(&key, &val);
     //printf("append: %s\n",filename_.c_str());
     synced = true;
     return Status::OK();
@@ -470,8 +475,12 @@ class KVAppendableFileOpt : public WritableFile {
   ~KVAppendableFileOpt() { }
 
   virtual Status Append(const Slice& data) {
-    value_.clear();
     value_.append(data.data(), data.size());
+    return Status::OK();
+  }
+
+  virtual Status Reset() {
+    value_.clear();
     return Status::OK();
   }
 
@@ -489,7 +498,8 @@ class KVAppendableFileOpt : public WritableFile {
     //Status s = SyncDirIfManifest();
     kvssd::Slice key (filename_);
     kvssd::Slice val (value_);
-    kvd_->kv_append(&key, &val);
+    kvd_->kv_store(&key, &val);
+    //kvd_->kv_append(&key, &val);
     //printf("append: %s\n",filename_.c_str());
     synced = true;
     return Status::OK();
