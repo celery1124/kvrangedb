@@ -45,6 +45,10 @@ struct Options {
   // BASE -> Retrieve all keys from device (random order), then sort
 	// INMEM -> Keep sorted keys in-memory, assume apps keep order
   IndexType indexType;
+
+  // Whether clean LSM, B-Tree meta KV
+  // LSM -> "/CURRENT"
+  bool cleanIndex;
   
   // Whether enable value prefetch for iterators
   // Default: false
@@ -64,6 +68,7 @@ struct Options {
 
   Options() : comparator(BytewiseComparator()),
               indexType(LSM),
+              cleanIndex(false),
               prefetchEnabled(false),
               prefetchDepth(16),
               rangefilterEnabled(false),

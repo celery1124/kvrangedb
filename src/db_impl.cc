@@ -39,6 +39,10 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
     printf("WRONG KV INDEX TYPE\n");
     exit(-1);
   }
+  if (options.cleanIndex) {
+    kvssd::Slice del_key_lsm("/CURRENT");
+    kvd_->kv_delete(&del_key_lsm);
+  }
 }
 
 DBImpl::~DBImpl() {

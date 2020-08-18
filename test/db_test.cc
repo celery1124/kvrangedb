@@ -126,14 +126,14 @@ void DoDelete(kvrangedb::DB *db, int num, bool seq) {
 void RandomRead(kvrangedb::DB *db, int num) {
   Random rand(0);
   kvrangedb::ReadOptions rdopts;
-  for (int i = 0; i < num; i++) {
+  for (int i = 0; i < 100; i++) {
       char key[100];
       const int k = (rand.Next() % num);
       snprintf(key, sizeof(key), "%016d", k);
 
       std::string val;
       db->Get(rdopts, key, &val);
-      //printf("[get] key %s, val %s, val_len %d\n", key, val.substr(0,8).c_str(), val.size());
+      printf("[get] key %s, val %s, val_len %d\n", key, val.substr(0,8).c_str(), val.size());
   }
 }
 
@@ -185,28 +185,42 @@ public:
 };
 
 int main () {
-  int num = 1000000;
+  int num = 10000;
+  int thread_cnt = 1;
 
   CustomComparator cmp;
   kvrangedb::Options options;
   options.comparator = &cmp;
+  options.cleanIndex = true;
 
   kvrangedb::DB *db = NULL;
-  kvrangedb::DB::Open(options, "/dev/kvemul", &db);
+  //kvrangedb::DB::Open(options, "/dev/kvemul", &db);
+  kvrangedb::DB::Open(options, "/dev/nvme0n1", &db);
 
   DoWrite(db, num, 0);
 
   sleep(1); // wait for write done
-  db->close_idx(); // close db index
+  // db->close_idx(); // close db index
 
-  // open db index again
-  db->open_idx();
+  // // open db index again
+  // db->open_idx();
 
   RandomRead(db, num);
+
+  std::thread *th_seek[16];
   RandomSeek(db, 10);
+  for (int i = 0; i< thread_cnt; i++) {
+    th_seek[i] = new std::thread(RandomSeek, db, 10);
+  }
+  for (int i = 0; i< thread_cnt; i++) {
+    th_seek[i]->join();
+  }
   DoScan(db, 10);
 
   delete db;
+  for (int i = 0; i< thread_cnt; i++) {
+    delete th_seek[i];
+  }
 
   return 0;
 }
