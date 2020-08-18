@@ -321,15 +321,17 @@ public:
 
 struct AsyncStore_context {
   Monitor *mon;
+  std::string *keyStr;
   kvssd::Slice *key;
   kvssd::Slice *val;
-  AsyncStore_context(Monitor *_mon, kvssd::Slice *_key, kvssd::Slice *_val) :
-  mon(_mon), key(_key), val(_val) {}
+  AsyncStore_context(Monitor *_mon, std::string *_keyStr, kvssd::Slice *_key, kvssd::Slice *_val) :
+  mon(_mon), keyStr(_keyStr), key(_key), val(_val) {}
 };
 
 static void kv_store_async_cb (void *args) {
     AsyncStore_context *ctx = (AsyncStore_context *)args;
     ctx->mon->notify();
+    delete ctx->keyStr;
     delete ctx->key;
     delete ctx->val;
     delete ctx;
@@ -391,7 +393,8 @@ class KVRandomAccessFileOpt: public RandomAccessFile {
                       char* scratch) const {
     if (offset < data_length_) { // read data block
       *result = NULL;
-      kvssd::Slice key (filename_+'/'+std::to_string(offset));
+      std::string dblk_name = filename_+'/'+std::to_string(offset);
+      kvssd::Slice key (dblk_name);
       kvd_->kv_get_oneshot(&key, scratch, n);
       *result = Slice(scratch, n);
     }
@@ -433,10 +436,12 @@ class KVWritableFileOpt : public WritableFile {
 
   virtual Status Flush() {
     // write block
-    kvssd::Slice *key = new kvssd::Slice (filename_+'/'+std::to_string(offset_));
+    std::string *keyStr = new std::string;
+    *keyStr += (filename_+'/'+std::to_string(offset_));
+    kvssd::Slice *key = new kvssd::Slice (*keyStr);
     kvssd::Slice *val = new kvssd::Slice (value_);
     Monitor *mon = new Monitor;
-    AsyncStore_context *ctx = new AsyncStore_context(mon, key, val);
+    AsyncStore_context *ctx = new AsyncStore_context(mon, keyStr, key, val);
     kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
     monList_.push_back(mon);
 
@@ -450,10 +455,12 @@ class KVWritableFileOpt : public WritableFile {
     char buf[sizeof(offset_)];
     EncodeFixed32(buf, offset_);
     value_.append(buf, sizeof(buf));
-    kvssd::Slice *key = new kvssd::Slice (filename_+"/meta");
+    std::string *keyStr = new std::string;
+    *keyStr += (filename_+"/meta");
+    kvssd::Slice *key = new kvssd::Slice (*keyStr);
     kvssd::Slice *val = new kvssd::Slice (value_);
     Monitor *mon = new Monitor;
-    AsyncStore_context *ctx = new AsyncStore_context(mon, key, val);
+    AsyncStore_context *ctx = new AsyncStore_context(mon, keyStr, key, val);
     kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
     monList_.push_back(mon);
 
