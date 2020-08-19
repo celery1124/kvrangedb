@@ -56,6 +56,10 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 }
 
 DBImpl::~DBImpl() {
+  if (idx_batch_->Size()) {
+    key_idx_->Write(idx_batch_);
+    idx_batch_->Clear();
+  }
   delete key_idx_;
   delete idx_batch_;
 	delete kvd_;
