@@ -142,9 +142,17 @@ struct WriteOptions {
   // From LevelDB write options, currently we don't use this
   // Default: false
   bool sync;
+  // Write Index in batch
+  // Default: false
+  bool batchIDXWrite;
+  // Batch size for batch index write
+  // Default: 8
+  size_t batchIDXSize;
 
   WriteOptions()
-      : sync(false) {
+      : sync(false),
+        batchIDXWrite(false),
+        batchIDXSize(8) {
   }
 };
 

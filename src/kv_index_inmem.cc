@@ -24,10 +24,10 @@ private:
   const kvrangedb::Comparator* cmp_;
 };
 
-class IDXWriteBatchBase : public IDXWriteBatch {
+class IDXWriteBatchInmem : public IDXWriteBatch {
 public: 
-  IDXWriteBatchBase () {};
-  ~IDXWriteBatchBase () {};
+  IDXWriteBatchInmem () {};
+  ~IDXWriteBatchInmem () {};
   void Put(const Slice& key) {
     // do nothing
   }
@@ -35,6 +35,8 @@ public:
     // do nothing
   }
   void Clear() {}
+  int Size() {return 0;}
+  void *InternalBatch() {return NULL;}
 };
 
 class IDXIteratorInMem: public IDXIterator {
@@ -95,6 +97,10 @@ KVIndexInMem::~KVIndexInMem() {
 
 KVIndex* NewInMemIndex(const Options& options, kvssd::KVSSD* kvd) {
   return new KVIndexInMem(options, kvd);
+}
+
+IDXWriteBatch* NewIDXWriteBatchInmem() {
+  return new IDXWriteBatchInmem();
 }
 
 bool KVIndexInMem::Put(const Slice &key) {

@@ -67,22 +67,29 @@ private:
 
 class IDXWriteBatchLSM : public IDXWriteBatch {
 public: 
-  IDXWriteBatchLSM () {};
+  IDXWriteBatchLSM () : size_(0) {};
   ~IDXWriteBatchLSM () {};
   void Put(const Slice& key) {
     leveldb::Slice put_key(key.data(), key.size());
     leveldb::Slice put_val; //don't care;
     batch_.Put(put_key, put_val);
+    size_++;
   }
   void Delete(const Slice& key) {
     leveldb::Slice put_key(key.data(), key.size());
     batch_.Delete(put_key);
+    size_--;
   }
-  void Clear() {batch_.Clear();}
+  void Clear() {
+    size_ = 0;
+    batch_.Clear();
+  }
   void *InternalBatch() {return &batch_;}
+  int Size() {return size_;}
 
 public:
   leveldb::WriteBatch batch_;
+  int size_;
 };
 
 class IDXIteratorLSM : public IDXIterator {
@@ -158,6 +165,10 @@ KVIndexLSM::~KVIndexLSM() {
 
 KVIndex* NewLSMIndex(const Options& options, kvssd::KVSSD* kvd) {
   return new KVIndexLSM(options, kvd);
+}
+
+IDXWriteBatch* NewIDXWriteBatchLSM() {
+  return new IDXWriteBatchLSM();
 }
 
 bool KVIndexLSM::Put(const Slice &key) {

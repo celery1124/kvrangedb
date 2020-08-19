@@ -57,6 +57,7 @@ public:
 private:
   kvssd::KVSSD *kvd_;
   KVIndex *key_idx_;
+  IDXWriteBatch *idx_batch_;
 
   const Options options_;
 

@@ -27,21 +27,27 @@ private:
 
 class IDXWriteBatchBTree : public IDXWriteBatch {
 public: 
-  IDXWriteBatchBTree () {};
+  IDXWriteBatchBTree () :size_(0) {};
   ~IDXWriteBatchBTree () {};
   void Put(const Slice& key) {
     kvbtree::Slice put_key(key.data(), key.size());
     batch_.Put(put_key);
+    size_++;
   }
   void Delete(const Slice& key) {
     kvbtree::Slice del_key(key.data(), key.size());
     batch_.Delete(del_key);
+    size_--;
   }
-  void Clear() {batch_.Clear();}
+  void Clear() {size_ = 0; 
+    batch_.Clear();
+  }
+  int Size() {return size_;}
   void *InternalBatch() {return &batch_;}
 
 public:
   kvbtree::WriteBatch batch_;
+  int size_;
 };
 
 class IDXIteratorBTree : public IDXIterator {
@@ -98,6 +104,10 @@ KVIndexBTree::~KVIndexBTree() {
 
 KVIndex* NewBTreeIndex(const Options& options, kvssd::KVSSD* kvd) {
   return new KVIndexBTree(options, kvd);
+}
+
+IDXWriteBatch* NewIDXWriteBatchBTree() {
+  return new IDXWriteBatchBTree();
 }
 
 bool KVIndexBTree::Put(const Slice &key) {

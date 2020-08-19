@@ -28,6 +28,9 @@ class IDXWriteBatch {
   // Clear all updates buffered in this batch.
   virtual void Clear() = 0;
 
+  // Reture size of the batch.
+  virtual int Size() = 0;
+
   // return the pointer for specific implementation class batch
   virtual void *InternalBatch() = 0;
 };
@@ -101,6 +104,12 @@ KVIndex* NewLSMIndex(const Options& options, kvssd::KVSSD* kvd);
 KVIndex* NewBTreeIndex(const Options& options, kvssd::KVSSD* kvd);
 KVIndex* NewBaseIndex(const Options& options, kvssd::KVSSD* kvd);
 KVIndex* NewInMemIndex(const Options& options, kvssd::KVSSD* kvd);
+
+IDXWriteBatch* NewIDXWriteBatchLSM();
+IDXWriteBatch* NewIDXWriteBatchBTree();
+IDXWriteBatch* NewIDXWriteBatchBase();
+IDXWriteBatch* NewIDXWriteBatchInmem();
+
 
 }  // namespace kvrangedb
 

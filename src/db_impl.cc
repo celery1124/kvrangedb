@@ -25,17 +25,25 @@ static void on_io_complete(void *args) {
 DBImpl::DBImpl(const Options& options, const std::string& dbname) 
 : options_(options) {
   kvd_ = new kvssd::KVSSD(dbname.c_str());
-  if (options.indexType == LSM)
+  if (options.indexType == LSM) {
 	  key_idx_ = NewLSMIndex(options, kvd_);
-  else if (options.indexType == LSMOPT)
+    idx_batch_ = NewIDXWriteBatchLSM();
+  }
+  else if (options.indexType == LSMOPT) {
     key_idx_ = NewLSMIndex(options, kvd_);
-  else if (options.indexType == BTREE)
+    idx_batch_ = NewIDXWriteBatchLSM();
+  }
+  else if (options.indexType == BTREE) {
     key_idx_ = NewBTreeIndex(options, kvd_);
+    idx_batch_ = NewIDXWriteBatchBTree();
+  }
   else if (options.indexType == BASE) {
     key_idx_ = NewBaseIndex(options, kvd_);
+    idx_batch_ = NewIDXWriteBatchBase();
   }
   else if (options.indexType == INMEM) {
     key_idx_ = NewInMemIndex(options, kvd_);
+    idx_batch_ = NewIDXWriteBatchInmem();
   }
   else {
     printf("WRONG KV INDEX TYPE\n");
@@ -49,6 +57,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 
 DBImpl::~DBImpl() {
   delete key_idx_;
+  delete idx_batch_;
 	delete kvd_;
   printf("hitCnt = %d\n", hitCnt);
   printf("hitCost = %.3f, missCost = %.3f\n", hitCost, missCost);
@@ -62,8 +71,15 @@ Status DBImpl::Put(const WriteOptions& options,
   kvssd::Slice put_val(value.data(), value.size());
   Monitor mon;
   kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
-  key_idx_->Put(key);
-
+  //key_idx_->Put(key);
+  
+  if (idx_batch_->Size() < 8) {
+    idx_batch_->Put(key);
+  }
+  else {
+    key_idx_->Write(idx_batch_);
+    idx_batch_->Clear();
+  }
   mon.wait(); // wait data I/O done
   return Status();
 }

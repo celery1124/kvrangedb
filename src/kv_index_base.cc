@@ -35,6 +35,8 @@ public:
     // do nothing
   }
   void Clear() {}
+  int Size() {return 0;}
+  void *InternalBatch() {return NULL;}
 };
 
 class IDXIteratorBase: public IDXIterator {
@@ -95,6 +97,10 @@ KVIndexBase::~KVIndexBase() {
 
 KVIndex* NewBaseIndex(const Options& options, kvssd::KVSSD* kvd) {
   return new KVIndexBase(options, kvd);
+}
+
+IDXWriteBatch* NewIDXWriteBatchBase() {
+  return new IDXWriteBatchBase();
 }
 
 bool KVIndexBase::Put(const Slice &key) {
