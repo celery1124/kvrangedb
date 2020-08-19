@@ -9,6 +9,8 @@
 
 
 #include <string>
+#include <vector>
+#include <utility>
 #include "kvrangedb/status.h"
 
 namespace kvrangedb {
@@ -29,6 +31,11 @@ class WriteBatch {
   // Clear all updates buffered in this batch.
   void Clear();
 
+  // Batch size
+  int Size();
+
+ public:
+  std::vector<std::pair<std::string, std::string>> batch_;
 };
 
 }  // namespace kvrangedb

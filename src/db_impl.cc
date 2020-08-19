@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include "kvrangedb/db.h"
 #include "kvrangedb/iterator.h"
+#include "kvrangedb/write_batch.h"
 #include "db_impl.h"
 #include "db_iter.h"
 
@@ -16,6 +17,23 @@ extern double missCost;
 extern double hitNextCost;
 extern double missNextCost;
 namespace kvrangedb {
+
+// WriteBatch definition
+WriteBatch::WriteBatch() {}
+WriteBatch::~WriteBatch() {}
+
+void WriteBatch::Put(const Slice& key, const Slice& value) {
+    batch_.push_back(std::make_pair(key.ToString(), value.ToString()));
+}
+void WriteBatch::Delete(const Slice& key) {
+    batch_.push_back(std::make_pair(key.ToString(), std::string()));
+}
+void WriteBatch::Clear() {
+    batch_.clear();
+}
+int WriteBatch::Size() {
+    return batch_.size();
+}
 
 static void on_io_complete(void *args) {
     Monitor *mon = (Monitor *)args;
@@ -75,20 +93,19 @@ Status DBImpl::Put(const WriteOptions& options,
   kvssd::Slice put_val(value.data(), value.size());
   Monitor mon;
   kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
-  
-  // index write
-  if (options.batchIDXWrite) {
-    if (idx_batch_->Size() < 8) {
-      idx_batch_->Put(key);
-    }
-    else {
-      key_idx_->Write(idx_batch_);
-      idx_batch_->Clear();
-    }
-  }
-  else 
-    key_idx_->Put(key);
-  
+  key_idx_->Put(key);
+  // // index write
+  // if (options.batchIDXWrite) {
+  //   if (idx_batch_->Size() < 8) {
+  //     idx_batch_->Put(key);
+  //   }
+  //   else {
+  //     key_idx_->Write(idx_batch_);
+  //     idx_batch_->Clear();
+  //   }
+  // }
+  // else 
+  //   key_idx_->Put(key);
   
   mon.wait(); // wait data I/O done
   return Status();
@@ -102,6 +119,39 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
+  int batch_size = updates->Size();
+  IDXWriteBatch *idx_batch;
+  Monitor *mons = new Monitor[batch_size];
+  if (options_.indexType == LSM) {
+    idx_batch = NewIDXWriteBatchLSM();
+  }
+  else if (options_.indexType == LSMOPT) {
+    idx_batch = NewIDXWriteBatchLSM();
+  }
+  else if (options_.indexType == BTREE) {
+    idx_batch = NewIDXWriteBatchBTree();
+  }
+  else if (options_.indexType == BASE) {
+    idx_batch = NewIDXWriteBatchBase();
+  }
+  else if (options_.indexType == INMEM) {
+    idx_batch = NewIDXWriteBatchInmem();
+  }
+  for (int i = 0; i < batch_size; i++) {
+    kvssd::Slice put_key(updates->batch_[i].first.data(), updates->batch_[i].first.size());
+    kvssd::Slice put_val(updates->batch_[i].second.data(), updates->batch_[i].second.size());
+    kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mons[i]);
+
+    Slice db_key(updates->batch_[i].first.data(), updates->batch_[i].first.size());
+    idx_batch->Put(db_key);
+  }
+  
+  key_idx_->Write(idx_batch);
+  idx_batch->Clear();
+  for(int i = 0; i < batch_size; i++) {
+    mons[i].wait();
+  }
+  delete [] mons;
 
   return Status();
 }
