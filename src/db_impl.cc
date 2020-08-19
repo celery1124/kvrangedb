@@ -75,15 +75,21 @@ Status DBImpl::Put(const WriteOptions& options,
   kvssd::Slice put_val(value.data(), value.size());
   Monitor mon;
   kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
-  //key_idx_->Put(key);
   
-  if (idx_batch_->Size() < 8) {
-    idx_batch_->Put(key);
+  // index write
+  if (options.batchIDXWrite) {
+    if (idx_batch_->Size() < 8) {
+      idx_batch_->Put(key);
+    }
+    else {
+      key_idx_->Write(idx_batch_);
+      idx_batch_->Clear();
+    }
   }
-  else {
-    key_idx_->Write(idx_batch_);
-    idx_batch_->Clear();
-  }
+  else 
+    key_idx_->Put(key);
+  
+  
   mon.wait(); // wait data I/O done
   return Status();
 }
