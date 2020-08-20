@@ -99,10 +99,11 @@ class RandomGenerator {
   }
 };
 
-void DoWrite(kvrangedb::DB *db, int num, bool seq) {
+void DoWrite(kvrangedb::DB *db, int num, bool seq, bool batchIDX) {
     RandomGenerator gen;
     Random rand(0);
     kvrangedb::WriteOptions wropts;
+    wropts.batchIDXWrite = batchIDX;
     for (int i = 0; i < num; i++) {
         const int k = seq ? i : (rand.Next() % num);
         char key[100];
@@ -214,13 +215,14 @@ int main () {
   kvrangedb::Options options;
   options.comparator = &cmp;
   options.cleanIndex = true;
+  options.indexNum = 4;
 
   kvrangedb::DB *db = NULL;
   //kvrangedb::DB::Open(options, "/dev/kvemul", &db);
   kvrangedb::DB::Open(options, "/dev/nvme0n1", &db);
 
   auto wcts = std::chrono::system_clock::now();
-  DoWrite(db, num, 0);
+  DoWrite(db, num, false, true);
   std::chrono::duration<double> wctduration = (std::chrono::system_clock::now() - wcts);
 
   sleep(1); // wait for write done
