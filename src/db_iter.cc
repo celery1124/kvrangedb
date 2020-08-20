@@ -54,8 +54,8 @@ public:
   ~MergeIterator() {
     for (int i = 0; i < n_; i++) {
       delete children_[i];
-      delete [] children_; 
     }
+    delete [] children_; 
   };
 
   bool Valid() const {return (current_ != NULL);};

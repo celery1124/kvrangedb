@@ -68,8 +68,11 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   }
   
   if (options.cleanIndex) {
-    kvssd::Slice del_key_lsm("/CURRENT");
-    kvd_->kv_delete(&del_key_lsm);
+    for (int i = 0; i < options_.indexNum; i++) {
+      std::string meta_name = std::to_string(i)+"/CURRENT";
+      kvssd::Slice del_key_lsm(meta_name);
+      kvd_->kv_delete(&del_key_lsm);
+    }
   }
 }
 
