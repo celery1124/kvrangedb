@@ -50,6 +50,10 @@ struct Options {
   // Whether clean LSM, B-Tree meta KV
   // LSM -> "/CURRENT"
   bool cleanIndex;
+
+  // Number of index partitions, MAX 8 (currently only support LSM)
+  // Default: 1 (no partition)
+  int indexNum;
   
   // Whether enable value prefetch for iterators
   // Default: false
@@ -70,6 +74,7 @@ struct Options {
   Options() : comparator(BytewiseComparator()),
               indexType(LSM),
               cleanIndex(false),
+              indexNum(1),
               prefetchEnabled(false),
               prefetchDepth(16),
               rangefilterEnabled(false),
@@ -90,6 +95,10 @@ struct Options {
 				indexType = INMEM;
       else
         indexType = LSM;
+    }
+
+    if(env_p = std::getenv("INDEX_NUM")) {
+      indexNum = atoi(env_p);
     }
 
     if(env_p = std::getenv("PREFETCH_ENA")) {

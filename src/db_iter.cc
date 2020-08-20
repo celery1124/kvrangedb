@@ -40,6 +40,74 @@ void on_prefetch_complete(void* args) {
   }
 }
 
+class MergeIterator : public Iterator {
+public:
+  MergeIterator(DBImpl *db, const ReadOptions &options, int n) : 
+        comparator_(db->GetComparator()),
+        n_(n),
+        children_(new IDXIterator*[n]),
+        current_(NULL) {
+      for (int i = 0; i < n; i++) {
+        children_[i] = db->GetKVIndex(i)->NewIterator(options); 
+      }
+  };
+  ~MergeIterator() {
+    for (int i = 0; i < n_; i++) {
+      delete children_[i];
+      delete [] children_; 
+    }
+  };
+
+  bool Valid() const {return (current_ != NULL);};
+  void SeekToFirst() {
+    for (int i = 0; i < n_; i++) {
+      children_[i]->SeekToFirst();
+    }
+    FindSmallest();
+  };
+  void SeekToLast() { /* NOT IMPLEMENT */ }
+  void Seek(const Slice& target) {
+    for (int i = 0; i < n_; i++) {
+      children_[i]->Seek(target);
+    }
+    FindSmallest();
+  };
+  void Next() {
+    assert(Valid());
+
+    current_->Next();
+    FindSmallest();
+  };
+  void Prev() { /* NOT IMPLEMENT */ }
+  Slice key() const {
+    assert(Valid());
+    return current_->key();
+  };
+  Slice value() { return Slice();/* NOT IMPLEMENT */};
+
+private:
+  const Comparator* comparator_;
+  void FindSmallest() {
+    IDXIterator* smallest = NULL;
+    for (int i = 0; i < n_; i++) {
+      IDXIterator* child = children_[i];
+      if (child->Valid()) {
+        if (smallest == NULL) {
+          smallest = child;
+        } else if (comparator_->Compare(child->key(), smallest->key()) < 0) {
+          smallest = child;
+        }
+      }
+    }
+    current_ = smallest;
+  };
+
+  int n_;
+  IDXIterator** children_;
+  IDXIterator* current_;
+
+};
+
 class DBIterator : public Iterator {
 public:
   DBIterator(DBImpl *db, const ReadOptions &options);
@@ -58,7 +126,7 @@ public:
 private:
   DBImpl *db_;
   const ReadOptions &options_;
-  IDXIterator *it_;
+  MergeIterator *it_;
   kvssd::KVSSD *kvd_;
   std::string value_;
   bool valid_;
@@ -91,7 +159,7 @@ DBIterator::DBIterator(DBImpl *db, const ReadOptions &options)
     for (int i = 0 ; i < prefetch_depth; i++) val_queue_[i].clear();
     valid_queue_ = new bool[prefetch_depth];
   }
-  it_ = db->GetKVIndex()->NewIterator(options);
+  it_ = new MergeIterator(db, options, db->options_.indexNum);
 }
 
 DBIterator::~DBIterator() { 
@@ -195,7 +263,7 @@ void DBIterator::Seek(const Slice& target) {
       return;
     }
   }
-  
+  // none phase
   it_->Seek(target); 
   if (db_->options_.prefetchEnabled) {
     valid_ = valid_queue_[0] = it_->Valid();

@@ -100,10 +100,10 @@ class KVIndex {
   void operator=(const KVIndex&);
 };
 
-KVIndex* NewLSMIndex(const Options& options, kvssd::KVSSD* kvd);
-KVIndex* NewBTreeIndex(const Options& options, kvssd::KVSSD* kvd);
-KVIndex* NewBaseIndex(const Options& options, kvssd::KVSSD* kvd);
-KVIndex* NewInMemIndex(const Options& options, kvssd::KVSSD* kvd);
+KVIndex* NewLSMIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name);
+KVIndex* NewBTreeIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name);
+KVIndex* NewBaseIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name);
+KVIndex* NewInMemIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name);
 
 IDXWriteBatch* NewIDXWriteBatchLSM();
 IDXWriteBatch* NewIDXWriteBatchBTree();

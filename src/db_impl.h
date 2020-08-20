@@ -14,6 +14,8 @@
 #include "kvssd/kvssd.h"
 #include "kv_index.h"
 
+#define MAX_INDEX_NUM 8
+
 namespace kvrangedb {
 
 // Monitor for async I/O
@@ -52,36 +54,40 @@ public:
   Iterator* NewIterator(const ReadOptions&);
 
   kvssd::KVSSD* GetKVSSD() {return kvd_;}
-  KVIndex* GetKVIndex() {return key_idx_;}
+  KVIndex* GetKVIndex(int id) {return key_idx_[id];}
+  const Comparator* GetComparator() {return options_.comparator;}
 
 private:
   kvssd::KVSSD *kvd_;
-  KVIndex *key_idx_;
-  IDXWriteBatch *idx_batch_;
+  KVIndex *key_idx_[MAX_INDEX_NUM];
 
   const Options options_;
 
 public:
   // DEBUG ONLY
   void close_idx () {
-    delete key_idx_;
+    for (int i = 0; i < options_.indexNum; i++)
+    delete key_idx_[i];
   }
   void open_idx() {
-    if (options_.indexType == LSM)
-      key_idx_ = NewLSMIndex(options_, kvd_);
-    else if (options_.indexType == LSMOPT)
-      key_idx_ = NewLSMIndex(options_, kvd_);
-    else if (options_.indexType == BTREE)
-      key_idx_ = NewBTreeIndex(options_, kvd_);
-    else if (options_.indexType == BASE) {
-      key_idx_ = NewBaseIndex(options_, kvd_);
-    }
-    else if (options_.indexType == INMEM) {
-      key_idx_ = NewInMemIndex(options_, kvd_);
-    }
-    else {
-      printf("WRONG KV INDEX TYPE\n");
-      exit(-1);
+    for (int i = 0; i < options_.indexNum; i++) {
+      std::string indexName = std::to_string(i);
+      if (options_.indexType == LSM)
+        key_idx_[i] = NewLSMIndex(options_, kvd_, indexName);
+      else if (options_.indexType == LSMOPT)
+        key_idx_[i] = NewLSMIndex(options_, kvd_, indexName);
+      else if (options_.indexType == BTREE)
+        key_idx_[i] = NewBTreeIndex(options_, kvd_, indexName);
+      else if (options_.indexType == BASE) {
+        key_idx_[i] = NewBaseIndex(options_, kvd_, indexName);
+      }
+      else if (options_.indexType == INMEM) {
+        key_idx_[i] = NewInMemIndex(options_, kvd_, indexName);
+      }
+      else {
+        printf("WRONG KV INDEX TYPE\n");
+        exit(-1);
+      }
     }
   }
 };

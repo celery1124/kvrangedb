@@ -77,7 +77,7 @@ private:
 
 class KVIndexBTree : public KVIndex {
 public:
-  KVIndexBTree (const Options& options, kvssd::KVSSD* kvd);
+  KVIndexBTree (const Options& options, kvssd::KVSSD* kvd, std::string& name);
   ~KVIndexBTree ();
 
   // implmentations
@@ -87,12 +87,13 @@ public:
   IDXIterator* NewIterator(const ReadOptions& options);
  
 private:
+  std::string name_;
   kvbtree::KVBplusTree *db_;
   kvssd::KVSSD *kvd_;
   kvbtree::Comparator *cmp_;
 };
 
-KVIndexBTree::KVIndexBTree(const Options& db_options, kvssd::KVSSD* kvd) : kvd_(kvd) {
+KVIndexBTree::KVIndexBTree(const Options& db_options, kvssd::KVSSD* kvd, std::string& name) : name_(name), kvd_(kvd) {
   cmp_ = new ComparatorBTree(db_options.comparator);
   db_ = new kvbtree::KVBplusTree(cmp_, kvd, 1024, 4096);
 }
@@ -102,8 +103,8 @@ KVIndexBTree::~KVIndexBTree() {
   delete cmp_;
 }
 
-KVIndex* NewBTreeIndex(const Options& options, kvssd::KVSSD* kvd) {
-  return new KVIndexBTree(options, kvd);
+KVIndex* NewBTreeIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name) {
+  return new KVIndexBTree(options, kvd, name);
 }
 
 IDXWriteBatch* NewIDXWriteBatchBTree() {

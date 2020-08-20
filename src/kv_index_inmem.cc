@@ -69,7 +69,7 @@ private:
 
 class KVIndexInMem : public KVIndex {
 public:
-  KVIndexInMem (const Options& options, kvssd::KVSSD* kvd);
+  KVIndexInMem (const Options& options, kvssd::KVSSD* kvd, std::string& name);
   ~KVIndexInMem ();
 
   // implmentations
@@ -79,12 +79,13 @@ public:
   IDXIterator* NewIterator(const ReadOptions& options);
  
 private:
+  std::string name_;
   inmem::InMem* inmem_;
   kvssd::KVSSD* kvd_;
   ComparatorInMem* cmp_;
 };
 
-KVIndexInMem::KVIndexInMem(const Options& db_options, kvssd::KVSSD* kvd) : kvd_(kvd) {
+KVIndexInMem::KVIndexInMem(const Options& db_options, kvssd::KVSSD* kvd, std::string& name) : name_(name), kvd_(kvd) {
   // apply db options
   cmp_ = new ComparatorInMem(db_options.comparator);
   inmem_ = new inmem::InMem(cmp_, kvd);
@@ -95,8 +96,8 @@ KVIndexInMem::~KVIndexInMem() {
   delete inmem_;
 }
 
-KVIndex* NewInMemIndex(const Options& options, kvssd::KVSSD* kvd) {
-  return new KVIndexInMem(options, kvd);
+KVIndex* NewInMemIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name) {
+  return new KVIndexInMem(options, kvd, name);
 }
 
 IDXWriteBatch* NewIDXWriteBatchInmem() {

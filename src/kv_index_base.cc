@@ -69,7 +69,7 @@ private:
 
 class KVIndexBase : public KVIndex {
 public:
-  KVIndexBase (const Options& options, kvssd::KVSSD* kvd);
+  KVIndexBase (const Options& options, kvssd::KVSSD* kvd, std::string& name);
   ~KVIndexBase ();
 
   // implmentations
@@ -79,12 +79,13 @@ public:
   IDXIterator* NewIterator(const ReadOptions& options);
  
 private:
+  std::string name_;
   base::BaseOrder* base_;
   kvssd::KVSSD* kvd_;
   ComparatorBase* cmp_;
 };
 
-KVIndexBase::KVIndexBase(const Options& db_options, kvssd::KVSSD* kvd) : kvd_(kvd) {
+KVIndexBase::KVIndexBase(const Options& db_options, kvssd::KVSSD* kvd, std::string& name) : name_(name), kvd_(kvd) {
   // apply db options
   cmp_ = new ComparatorBase(db_options.comparator);
   base_ = new base::BaseOrder(cmp_, kvd);
@@ -95,8 +96,8 @@ KVIndexBase::~KVIndexBase() {
   delete base_;
 }
 
-KVIndex* NewBaseIndex(const Options& options, kvssd::KVSSD* kvd) {
-  return new KVIndexBase(options, kvd);
+KVIndex* NewBaseIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name) {
+  return new KVIndexBase(options, kvd, name);
 }
 
 IDXWriteBatch* NewIDXWriteBatchBase() {

@@ -119,7 +119,7 @@ private:
 
 class KVIndexLSM : public KVIndex {
 public:
-  KVIndexLSM (const Options& options, kvssd::KVSSD* kvd);
+  KVIndexLSM (const Options& options, kvssd::KVSSD* kvd, std::string& name);
   ~KVIndexLSM ();
 
   // implmentations
@@ -129,13 +129,14 @@ public:
   IDXIterator* NewIterator(const ReadOptions& options);
  
 private:
+  std::string name_;
   leveldb::DB* db_;
   leveldb::WriteOptions write_options_;
   kvssd::KVSSD* kvd_;
   ComparatorLSM* cmp_;
 };
 
-KVIndexLSM::KVIndexLSM(const Options& db_options, kvssd::KVSSD* kvd) : kvd_(kvd) {
+KVIndexLSM::KVIndexLSM(const Options& db_options, kvssd::KVSSD* kvd, std::string& name) : name_(name), kvd_(kvd) {
   leveldb::Options options;
   options.create_if_missing = true;
   options.max_open_files = 1000;
@@ -155,7 +156,7 @@ KVIndexLSM::KVIndexLSM(const Options& db_options, kvssd::KVSSD* kvd) : kvd_(kvd)
     options.env = leveldb::NewKVEnvOpt(leveldb::Env::Default(), kvd);
   else 
     options.env = leveldb::NewKVEnv(leveldb::Env::Default(), kvd);
-  leveldb::Status status = leveldb::DB::Open(options, "", &db_);
+  leveldb::Status status = leveldb::DB::Open(options, name, &db_);
 }
 
 KVIndexLSM::~KVIndexLSM() {
@@ -163,8 +164,8 @@ KVIndexLSM::~KVIndexLSM() {
   delete cmp_;
 }
 
-KVIndex* NewLSMIndex(const Options& options, kvssd::KVSSD* kvd) {
-  return new KVIndexLSM(options, kvd);
+KVIndex* NewLSMIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name) {
+  return new KVIndexLSM(options, kvd, name);
 }
 
 IDXWriteBatch* NewIDXWriteBatchLSM() {
