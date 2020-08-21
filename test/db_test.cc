@@ -208,18 +208,18 @@ public:
 };
 
 int main () {
-  int num = 330000;
+  int num = 1330000;
   int thread_cnt = 1;
 
   CustomComparator cmp;
   kvrangedb::Options options;
   options.comparator = &cmp;
   options.cleanIndex = true;
-  options.indexNum = 4;
+  options.indexNum = 1;
 
   kvrangedb::DB *db = NULL;
   //kvrangedb::DB::Open(options, "/dev/kvemul", &db);
-  kvrangedb::DB::Open(options, "/dev/nvme0n1", &db);
+  kvrangedb::DB::Open(options, "/dev/nvme1n1", &db);
 
   auto wcts = std::chrono::system_clock::now();
   DoWrite(db, num, false, true);
