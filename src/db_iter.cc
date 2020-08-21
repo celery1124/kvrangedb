@@ -10,6 +10,7 @@
 #include "db_impl.h"
 #include "db_iter.h"
 #include "kvssd/kvssd.h"
+#include <thread>
 
 #include <ctime>
 #include <chrono>
@@ -60,17 +61,45 @@ public:
 
   bool Valid() const {return (current_ != NULL);};
   void SeekToFirst() {
-    for (int i = 0; i < n_; i++) {
-      children_[i]->SeekToFirst();
+    if (n_ == 1) { // fast path
+      children_[0]->SeekToFirst();
+      current_ = children_[0];
     }
-    FindSmallest();
+    else { // parallel seek
+      std::thread **t = new std::thread*[n_];
+      for (int i = 0 ; i < n_; i++) {
+        t[i] = new std::thread (&IDXIterator::SeekToFirst, children_[i]);
+      }
+      for (int i = 0; i < n_; i++) {
+        t[i]->join();
+        delete t[i];
+      }
+      delete [] t;
+      FindSmallest();
+    }
   };
   void SeekToLast() { /* NOT IMPLEMENT */ }
   void Seek(const Slice& target) {
-    for (int i = 0; i < n_; i++) {
-      children_[i]->Seek(target);
+    // for (int i = 0; i < n_; i++) {
+    //   children_[i]->Seek(target);
+    // }
+    // FindSmallest();
+    if (n_ == 1) { // fast path
+      children_[0]->Seek(target);
+      current_ = children_[0];
     }
-    FindSmallest();
+    else { // parallel seek
+      std::thread **t = new std::thread*[n_];
+      for (int i = 0 ; i < n_; i++) {
+        t[i] = new std::thread (&IDXIterator::Seek, children_[i], target);
+      }
+      for (int i = 0; i < n_; i++) {
+        t[i]->join();
+        delete t[i];
+      }
+      delete [] t;
+      FindSmallest();
+    }
   };
   void Next() {
     assert(Valid());
