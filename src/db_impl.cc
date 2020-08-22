@@ -92,7 +92,7 @@ Status DBImpl::Put(const WriteOptions& options,
   Monitor mon;
   kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
   // index write
-  int idx_id = MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
+  int idx_id = (options_.indexNum == 0) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
   key_idx_[idx_id]->Put(key);
   
   mon.wait(); // wait data I/O done
@@ -102,7 +102,7 @@ Status DBImpl::Put(const WriteOptions& options,
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
   kvssd::Slice del_key(key.data(), key.size());
 	kvd_->kv_delete(&del_key);
-  int idx_id = MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
+  int idx_id = (options_.indexNum == 0) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
   key_idx_[idx_id]->Delete(key);
   return Status();
 }
@@ -135,7 +135,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mons[i]);
 
     Slice db_key(updates->batch_[i].first.data(), updates->batch_[i].first.size());
-    int idx_id = MurmurHash64A(updates->batch_[i].first.data(), updates->batch_[i].first.size(), 0);
+    int idx_id = (options_.indexNum == 0) ? 0 : MurmurHash64A(updates->batch_[i].first.data(), updates->batch_[i].first.size(), 0);
     idx_batch[idx_id]->Put(db_key);
   }
   
@@ -147,6 +147,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     mons[i].wait();
   }
   delete [] mons;
+  delete [] idx_batch;
 
   return Status();
 }
