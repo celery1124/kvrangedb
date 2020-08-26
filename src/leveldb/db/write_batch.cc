@@ -53,9 +53,8 @@ Status WriteBatch::Iterate(Handler* handler) const {
     input.remove_prefix(1);
     switch (tag) {
       case kTypeValue:
-        // if (GetLengthPrefixedSlice(&input, &key) &&
-        //     GetLengthPrefixedSlice(&input, &value)) {
-        if (GetLengthPrefixedSlice(&input, &key)) {
+        if (GetLengthPrefixedSlice(&input, &key) &&
+            GetLengthPrefixedSlice(&input, &value)) {
           handler->Put(key, value);
         } else {
           return Status::Corruption("bad WriteBatch Put");
@@ -99,7 +98,7 @@ void WriteBatch::Put(const Slice& key, const Slice& value) {
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
   rep_.push_back(static_cast<char>(kTypeValue));
   PutLengthPrefixedSlice(&rep_, key);
-  //PutLengthPrefixedSlice(&rep_, value);
+  PutLengthPrefixedSlice(&rep_, value);
 }
 
 void WriteBatch::Delete(const Slice& key) {

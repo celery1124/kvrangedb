@@ -258,7 +258,7 @@ void DBIter::FindPrevUserEntry() {
             swap(empty, saved_value_);
           }
           SaveKey(ExtractUserKey(iter_->key()), &saved_key_);
-          //saved_value_.assign(raw_value.data(), raw_value.size());
+          saved_value_.assign(raw_value.data(), raw_value.size());
         }
       }
       iter_->Prev();
