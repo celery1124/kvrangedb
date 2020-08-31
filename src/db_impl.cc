@@ -249,6 +249,12 @@ void DBImpl::processQ(int id) {
       if (pack_q_.size_approx() <= options_.packQueueDepth) 
       pack_q_wait_.notifyAll();
     }
+    else { // check shutdown
+        if (ready_to_shutdown && pack_q_.size_approx() == 0) {
+            shutdown = true;
+            break;
+        }
+    }
   }
 }
 
