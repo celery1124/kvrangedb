@@ -191,8 +191,11 @@ DBIterator::DBIterator(DBImpl *db, const ReadOptions &options)
     key_queue_ = new std::string[prefetch_depth];
     pkey_queue_ = new std::string[prefetch_depth];
     val_queue_ = new Slice[prefetch_depth];
-    for (int i = 0 ; i < prefetch_depth; i++) val_queue_[i].clear();
     valid_queue_ = new bool[prefetch_depth];
+    for (int i = 0 ; i < prefetch_depth; i++) {
+      valid_queue_[i] = false;
+      val_queue_[i].clear();
+    }
   }
   it_ = new MergeIterator(db, options, db->options_.indexNum);
 }
@@ -244,7 +247,7 @@ static bool do_unpack_KVs (char *vbuf, int size, const Slice& lkey, std::string*
   return false;
 }
 
-static bool do_unpack_KVs (char *vbuf, int size, const Slice& lkey, char* lvalue, int& lvsize) {
+static bool do_unpack_KVs (char *vbuf, int size, const Slice& lkey, char*& lvalue, int& lvsize) {
   char *p = vbuf;
   while ((p-vbuf) < size) {
     uint8_t key_len = *((uint8_t*)p);
@@ -289,7 +292,7 @@ void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>
     if (lkey_list[i].size() == 0)
       val_list.push_back(Slice(vbuf_list[i], actual_vlen_list[i]));
     else { // unpack KV
-      char *lvalue;
+      char *lvalue = nullptr;
       int lvsize;
       Slice lkey(lkey_list[i]);
       do_unpack_KVs(vbuf_list[i], actual_vlen_list[i], lkey, lvalue, lvsize);
@@ -364,6 +367,22 @@ void DBIterator::Seek(const Slice& target) {
   }
   else {
     valid_ = it_->Valid();
+  }
+
+  // implicit next for prefetch
+  assert(queue_cur_ == 0);
+  for (int i = 1; i < prefetch_depth_; i++) {
+    it_->Next();
+    bool valid = it_->Valid();
+    if(valid) {
+      key_queue_[i] = (it_->key()).ToString();
+      pkey_queue_[i] = (it_->value()).ToString();
+      valid_queue_[i] = true;
+    }
+    else {
+      valid_queue_[i] = false;
+      break;
+    }
   }
   
   std::chrono::duration<double, std::micro> missduration = (std::chrono::system_clock::now() - wcts);
