@@ -14,14 +14,16 @@
 #include <ctime>
 #include <chrono>
 #include <iostream>
+#include <mutex>
 
 #include "kvrangedb/slice.h"
 #include "kvrangedb/comparator.h"
 #include "kvrangedb/db.h"
 
-#define OBJ_LEN 1024
+int obj_len;
 
 std::map<std::string, std::string> groundTruth;
+std::mutex m;
 
 class Random {
  private:
@@ -99,7 +101,7 @@ class RandomGenerator {
   }
 };
 
-void DoWrite(kvrangedb::DB *db, int num, bool seq, bool batchIDX) {
+void DoWrite(kvrangedb::DB *db, int start_num, int num, bool seq, bool batchIDX) {
     RandomGenerator gen;
     Random rand(0);
     kvrangedb::WriteOptions wropts;
@@ -107,13 +109,16 @@ void DoWrite(kvrangedb::DB *db, int num, bool seq, bool batchIDX) {
     for (int i = 0; i < num; i++) {
         const int k = seq ? i : (rand.Next() % num);
         char key[100];
-        snprintf(key, sizeof(key), "%016d", k);
-        char *value = gen.Generate(OBJ_LEN);
-        kvrangedb::Slice val(value, OBJ_LEN);
+        snprintf(key, sizeof(key), "%016d", k+start_num);
+        char *value = gen.Generate(obj_len);
+        kvrangedb::Slice val(value, obj_len);
 
         db->Put(wropts, key, val);
         //printf("[insert] key %s, val %s\n", key, std::string(value, 8).c_str());
-        groundTruth[std::string(key, 16)] = std::string(value, 8).c_str();
+        {
+          std::unique_lock<std::mutex> lck(m);
+          groundTruth[std::string(key, 16)] = std::string(value, 8).c_str();
+        }
     }
 }
 
@@ -134,6 +139,8 @@ void DoDelete(kvrangedb::DB *db, int num, bool seq) {
 void RandomRead(kvrangedb::DB *db, int num) {
   Random rand(0);
   kvrangedb::ReadOptions rdopts;
+  if (obj_len >= 4096) rdopts.hint_packed = 1;
+  else rdopts.hint_packed = 2;
   for (int i = 0; i < 100; i++) {
       char key[100];
       const int k = (rand.Next() % num);
@@ -174,6 +181,7 @@ void RandomSeek(kvrangedb::DB *db, int num, int seed) {
 
 void DoScan(kvrangedb::DB *db, int num) {
   kvrangedb::ReadOptions rdopts;
+  rdopts.scan_length = 10;
   Random rand(2020);
   kvrangedb::Iterator* iter = db->NewIterator(rdopts);
   int scan_len = 10;
@@ -208,8 +216,9 @@ public:
 };
 
 int main () {
-  int num = 1330000;
-  int thread_cnt = 1;
+  int thread_cnt = 8;
+  int num = 30000;
+  obj_len = 1000;
 
   CustomComparator cmp;
   kvrangedb::Options options;
@@ -219,10 +228,17 @@ int main () {
 
   kvrangedb::DB *db = NULL;
   //kvrangedb::DB::Open(options, "/dev/kvemul", &db);
-  kvrangedb::DB::Open(options, "/dev/nvme1n1", &db);
+  kvrangedb::DB::Open(options, "/dev/nvme2n1", &db);
 
   auto wcts = std::chrono::system_clock::now();
-  DoWrite(db, num, false, true);
+  std::thread *th_write[16];
+  for (int i = 0; i< thread_cnt; i++) {
+    th_write[i] = new std::thread(DoWrite, db, i*num, num, false, false);
+  }
+  for (int i = 0; i< thread_cnt; i++) {
+    th_write[i]->join();
+  }
+
   std::chrono::duration<double> wctduration = (std::chrono::system_clock::now() - wcts);
 
   sleep(1); // wait for write done
@@ -233,17 +249,18 @@ int main () {
   RandomRead(db, num);
 
   std::thread *th_seek[16];
-  RandomSeek(db, num, 2019);
-  for (int i = 0; i< thread_cnt; i++) {
-    th_seek[i] = new std::thread(RandomSeek, db, num, i);
-  }
-  for (int i = 0; i< thread_cnt; i++) {
-    th_seek[i]->join();
-  }
+  RandomSeek(db, num*thread_cnt, 2019);
+  // for (int i = 0; i< thread_cnt; i++) {
+  //   th_seek[i] = new std::thread(RandomSeek, db, num, i);
+  // }
+  // for (int i = 0; i< thread_cnt; i++) {
+  //   th_seek[i]->join();
+  // }
 
-  DoScan(db, num);
+  DoScan(db, num*thread_cnt);
   for (int i = 0; i< thread_cnt; i++) {
-    delete th_seek[i];
+    //delete th_seek[i];
+    delete th_write[i];
   }
   
   std::cout << "DoWrite finished in " << wctduration.count() << " seconds [Wall Clock]" << std::endl;
