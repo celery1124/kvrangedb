@@ -144,7 +144,7 @@ static void do_pack_KVs (uint64_t seq, std::vector<packKVEntry*>& kvs, int pack_
     char* pack_key_str = (char*) malloc(sizeof(uint64_t));
     char* pack_val_str = (char*) malloc(pack_size);
     // key
-    *((uint8_t*)pack_key_str) = seq;
+    *((uint64_t*)pack_key_str) = seq;
     pack_key = kvssd::Slice (pack_key_str, sizeof(uint64_t));
     Slice pkey(pack_key_str, sizeof(uint64_t));
 
@@ -186,7 +186,7 @@ static bool do_unpack_KVs (char *vbuf, int size, const Slice& lkey, std::string*
     } else {
       p += val_len;
     }
-    assert ((p-vbuf) < size);
+    assert ((p-vbuf) <= size);
   }
   return false;
 }
@@ -246,7 +246,7 @@ void DBImpl::processQ(int id) {
 
       mon.wait(); // wait data I/O done
       
-      // cleanu up
+      // clean up
       free((char*) pack_key.data());
       free((char*) pack_val.data());
       if (pack_q_.size_approx() <= options_.packQueueDepth) 
