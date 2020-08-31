@@ -179,7 +179,7 @@ private:
   Slice isPackedCurrKey_;
   Slice isPackedCurrVal_;
 
-  void prefetch_value(std::vector<Slice>& key_list, std::vector<bool>& packed_list, std::vector<Slice>& val_list);
+  void prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>& lkey_list, std::vector<Slice>& val_list);
 };
 
 DBIterator::DBIterator(DBImpl *db, const ReadOptions &options) 
@@ -266,7 +266,7 @@ static bool do_unpack_KVs (char *vbuf, int size, const Slice& lkey, char* lvalue
   return false;
 }
 
-void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<bool>& packed_list, 
+void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>& lkey_list, 
                 std::vector<Slice>& val_list) {
   int prefetch_num = key_list.size();
   char **vbuf_list = new char*[prefetch_num];
@@ -286,12 +286,12 @@ void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<bool>&
   mon.wait();
   // save the vbuf
   for (int i = 0; i < prefetch_num; i++) {
-    if (packed_list[i] == false)
+    if (lkey_list[i].size() == 0)
       val_list.push_back(Slice(vbuf_list[i], actual_vlen_list[i]));
     else { // unpack KV
       char *lvalue;
       int lvsize;
-      Slice lkey(key_list[i]);
+      Slice lkey(lkey_list[i]);
       do_unpack_KVs(vbuf_list[i], actual_vlen_list[i], lkey, lvalue, lvsize);
       val_list.push_back(Slice(lvalue, lvsize));
       free(vbuf_list[i]);
@@ -453,7 +453,7 @@ Slice DBIterator::value() {
   else if (db_->options_.prefetchEnabled) {
     if (queue_cur_ == 0) {// do prefetch_value
       std::vector<Slice> key_list;
-      std::vector<bool> packed_list;
+      std::vector<Slice> lkey_list;
       std::vector<Slice> val_list;
 
       Slice upper_key;
@@ -465,26 +465,26 @@ Slice DBIterator::value() {
           if (upper_key.size() > 0 && db_->options_.comparator->Compare(key_queue_[i], upper_key) < 0) {
             if (pkey_queue_[i].size() > 0) {
               key_list.push_back(Slice(pkey_queue_[i]));
-              packed_list.push_back(true);
+              lkey_list.push_back(key_queue_[i]);
             } else {
               key_list.push_back(Slice(key_queue_[i]));
-              packed_list.push_back(false);
+              lkey_list.push_back(Slice());
             }
           }
           else if (upper_key.size() == 0) {
             if (pkey_queue_[i].size() > 0) {
               key_list.push_back(Slice(pkey_queue_[i]));
-              packed_list.push_back(true);
+              lkey_list.push_back(key_queue_[i]);
             } else {
               key_list.push_back(Slice(key_queue_[i]));
-              packed_list.push_back(false);
+              lkey_list.push_back(Slice());
             }
           }
           else {} // do nothing
         }
         else break;
       }
-      prefetch_value(key_list, packed_list, val_list);
+      prefetch_value(key_list, lkey_list, val_list);
       for (int i = 0; i < val_list.size(); i++) {
         val_queue_[i] = val_list[i];
       }
