@@ -93,6 +93,9 @@ DBImpl::~DBImpl() {
           std::unique_lock<std::mutex> lck (thread_m_[i]);
           shutdown_[i] = true;
       }
+  }
+
+  for (int i = 0; i < pack_threads_num; i++) { 
       pack_threads_[i]->join();
       delete pack_threads_[i];
     printf("Shutdown worker thread %d\n", i);
