@@ -93,6 +93,11 @@ private:
   bool *shutdown_;
 
   void processQ(int id);
+
+  bool do_check_filter(const Slice& key) {
+    /* NOT IMPLEMENT */
+    return false;
+  }
 public:
   // DEBUG ONLY
   void close_idx () {

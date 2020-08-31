@@ -350,11 +350,20 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
 Status DBImpl::Get(const ReadOptions& options,
                      const Slice& key,
                      std::string* value) {
+  bool possible_packed = true;
+  bool possible_unpacked = true;
   if (options.hint_packed == 2) { // small value
     // index lookup
     Slice lkey(key.data(), key.size());
     std::string pkey;
-    key_idx_[0]->Get(lkey, pkey);
+    bool idx_found = key_idx_[0]->Get(lkey, pkey);
+    if (!idx_found) { // definitely not found
+      return Status().NotFound(Slice());
+    }
+    else if (pkey.size() == 0) {
+      possible_packed = false;
+      goto fallover;
+    }
     kvssd::Slice get_key(pkey);
 
     char *vbuf;
@@ -367,8 +376,10 @@ Status DBImpl::Get(const ReadOptions& options,
         free(vbuf);
         return Status();
       }
-      else 
+      else {
         free(vbuf);
+        possible_packed = false;
+      }
     }
   }                     
   else if (options.hint_packed == 1) { // large value                     
@@ -381,13 +392,73 @@ Status DBImpl::Get(const ReadOptions& options,
       free(vbuf);
       return Status();
     }
-    
+    else {
+      free(vbuf);
+      possible_unpacked = false;
+    }
   }
 
-  // auto (fall back)
-  // NOT IMPLEMENT
-  
+  // auto (fall over)
+fallover:
+  // bloom filter check /* NOT IMPLEMENT */
+  bool filter_found = do_check_filter(key);
+  if(possible_unpacked && filter_found) {
+    kvssd::Slice get_key(key.data(), key.size());
+    char *vbuf;
+    int vlen;
+    int ret = kvd_->kv_get(&get_key, vbuf, vlen);
+    if (ret == 0) {
+      value->append(vbuf, vlen);
+      free(vbuf);
+      return Status();
+    }
+    else {
+      free(vbuf);
+    }
+  }
 
+  if (possible_packed) {
+    // index lookup
+    Slice lkey(key.data(), key.size());
+    std::string pkey;
+    bool idx_found = key_idx_[0]->Get(lkey, pkey);
+    if (!idx_found) { // definitely not found
+      return Status().NotFound(Slice());
+    }
+    if(pkey.size() == 0) { // filter false positive
+      kvssd::Slice get_key(key.data(), key.size());
+      char *vbuf;
+      int vlen;
+      int ret = kvd_->kv_get(&get_key, vbuf, vlen);
+      if (ret == 0) {
+        value->append(vbuf, vlen);
+        free(vbuf);
+        return Status();
+      }
+      else {
+        free(vbuf);
+        return Status().NotFound(Slice());
+      }
+    }
+    kvssd::Slice get_key(pkey);
+
+    char *vbuf;
+    int vlen;
+    int ret = kvd_->kv_get(&get_key, vbuf, vlen);
+
+    if (ret == 0) {
+      bool found = do_unpack_KVs(vbuf, vlen, key, value);
+      if (found) {
+        free(vbuf);
+        return Status();
+      }
+      else {
+        free(vbuf);
+        possible_packed = false;
+      }
+    }
+  }
+  
   return Status().NotFound(Slice());
 }
 
