@@ -165,7 +165,7 @@ static void do_pack_KVs (uint64_t seq, std::vector<packKVEntry*>& kvs, int pack_
 
       delete kvs[i]; // de-allocate KV buffer;
     }
-    assert((int)(pack_val_str-p) == pack_size);
+    assert((int)(p -pack_val_str) == pack_size);
     pack_val = kvssd::Slice (pack_val_str, pack_size);
 
     return;
