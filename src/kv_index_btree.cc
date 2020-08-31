@@ -34,6 +34,9 @@ public:
     batch_.Put(put_key);
     size_++;
   }
+  void Put(const Slice& lkey, const Slice& pkey) {
+    // do nothing
+  }
   void Delete(const Slice& key) {
     kvbtree::Slice del_key(key.data(), key.size());
     batch_.Delete(del_key);
@@ -71,6 +74,9 @@ public:
     kvbtree::Slice ret_key = it_->key();
     return Slice(ret_key.data(), ret_key.size());
   }
+  Slice pkey() const {
+    return Slice(); /* NOT IMPLEMENT */
+  }
 private:
   kvbtree::KVBplusTree::Iterator *it_;
 };
@@ -82,6 +88,8 @@ public:
 
   // implmentations
   bool Put(const Slice& key);
+  bool Put(const Slice& skey, const Slice& pkey);
+  bool Get(const Slice& skey, std::string& pkey);
   bool Delete(const Slice& key);
   bool Write(IDXWriteBatch* updates);
   IDXIterator* NewIterator(const ReadOptions& options);
@@ -114,6 +122,16 @@ IDXWriteBatch* NewIDXWriteBatchBTree() {
 bool KVIndexBTree::Put(const Slice &key) {
   kvbtree::Slice put_key(key.data(), key.size());
   return db_->Insert(&put_key);
+}
+
+bool KVIndexBTree::Put(const Slice &skey, const Slice &pkey) {
+  /** NOT IMPLEMENT **/
+  return true;
+}
+
+bool KVIndexBTree::Get(const Slice& skey, std::string& pkey) { 
+  /** NOT IMPLEMENT **/
+  return true;
 }
 
 bool KVIndexBTree::Delete(const Slice &key) {

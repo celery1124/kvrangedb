@@ -75,6 +75,12 @@ public:
     batch_.Put(put_key, put_val);
     size_++;
   }
+  void Put(const Slice& lkey, const Slice& pkey) {
+    leveldb::Slice put_key(lkey.data(), lkey.size());
+    leveldb::Slice put_val(pkey.data(), pkey.size()); //don't care;
+    batch_.Put(put_key, put_val);
+    size_++;
+  }
   void Delete(const Slice& key) {
     leveldb::Slice put_key(key.data(), key.size());
     batch_.Delete(put_key);
@@ -113,6 +119,10 @@ public:
     leveldb::Slice ret_key = it_->key();
     return Slice(ret_key.data(), ret_key.size());
   }
+  Slice pkey() const {
+    leveldb::Slice ret_val = it_->value();
+    return Slice(ret_val.data(), ret_val.size()); /* NOT IMPLEMENT */
+  }
 private:
   leveldb::Iterator *it_;
 };
@@ -124,6 +134,8 @@ public:
 
   // implmentations
   bool Put(const Slice& key);
+  bool Put(const Slice& skey, const Slice& pkey);
+  bool Get(const Slice& skey, std::string& pkey);
   bool Delete(const Slice& key);
   bool Write(IDXWriteBatch* updates);
   IDXIterator* NewIterator(const ReadOptions& options);
@@ -132,6 +144,7 @@ private:
   std::string name_;
   leveldb::DB* db_;
   leveldb::WriteOptions write_options_;
+  leveldb::ReadOptions read_options_;
   kvssd::KVSSD* kvd_;
   ComparatorLSM* cmp_;
 };
@@ -176,6 +189,17 @@ bool KVIndexLSM::Put(const Slice &key) {
   leveldb::Slice put_key(key.data(), key.size());
   leveldb::Slice put_val; // don't care
   return (db_->Put(write_options_, put_key, put_val)).ok();
+}
+
+bool KVIndexLSM::Put(const Slice& skey, const Slice& pkey) {
+  leveldb::Slice put_key(skey.data(), skey.size());
+  leveldb::Slice put_val(pkey.data(), pkey.size()); 
+  return (db_->Put(write_options_, put_key, put_val)).ok();
+}
+
+bool KVIndexLSM::Get(const Slice& skey, std::string& pkey) { 
+  leveldb::Slice get_key(skey.data(), skey.size());
+  return (db_->Get(read_options_, get_key, &pkey)).ok();
 }
 
 bool KVIndexLSM::Delete(const Slice &key) {

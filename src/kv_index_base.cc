@@ -31,6 +31,9 @@ public:
   void Put(const Slice& key) {
     // do nothing
   }
+  void Put(const Slice& lkey, const Slice& pkey) {
+    // do nothing
+  }
   void Delete(const Slice& key) {
     // do nothing
   }
@@ -63,6 +66,9 @@ public:
     base::Slice ret_key = it_->key();
     return Slice(ret_key.data(), ret_key.size());
   }
+  Slice pkey() const {
+    return Slice(); /* NOT IMPLEMENT */
+  }
 private:
   base::BaseOrder::Iterator *it_;
 };
@@ -74,6 +80,8 @@ public:
 
   // implmentations
   bool Put(const Slice& key);
+  bool Put(const Slice& skey, const Slice& pkey);
+  bool Get(const Slice& skey, std::string& pkey);
   bool Delete(const Slice& key);
   bool Write(IDXWriteBatch* updates);
   IDXIterator* NewIterator(const ReadOptions& options);
@@ -106,6 +114,16 @@ IDXWriteBatch* NewIDXWriteBatchBase() {
 
 bool KVIndexBase::Put(const Slice &key) {
   // do nothing
+  return true;
+}
+
+bool KVIndexBase::Put(const Slice &skey, const Slice &pkey) {
+  /** NOT IMPLEMENT **/
+  return true;
+}
+
+bool KVIndexBase::Get(const Slice& skey, std::string& pkey) { 
+  /** NOT IMPLEMENT **/
   return true;
 }
 

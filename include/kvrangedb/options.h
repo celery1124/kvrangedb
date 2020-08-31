@@ -60,7 +60,7 @@ struct Options {
   bool prefetchEnabled;
 
   // Prefetch buffer size
-  // Default: 16
+  // Default: 128
   int prefetchDepth;
 
   // Whether enable range filter for LSM index
@@ -71,15 +71,45 @@ struct Options {
   int helperHint;
   int helperTrainingThres;
 
+  // Pack size for physical KV
+  // Default: 4096
+  int packSize;
+
+  // Value size threshold for packing
+  // Default: 4096
+  int packThres;
+
+  // Max number of KVs for packing
+  // Default: 8
+  int maxPackNum;
+
+  // Timeout for packing thread dequeue in us
+  // Default: 5000
+  int packDequeueTimeout;
+
+  // Depth of the packed KV queue
+  // Default: 64
+  int packQueueDepth;
+
+  // Number of threads to write packed KV
+  // Default: 4
+  int packThreadsNum;
+
   Options() : comparator(BytewiseComparator()),
               indexType(LSM),
               cleanIndex(false),
               indexNum(1),
               prefetchEnabled(false),
-              prefetchDepth(16),
+              prefetchDepth(128),
               rangefilterEnabled(false),
               helperHint(0),
-              helperTrainingThres(10) {
+              helperTrainingThres(10),
+              packSize(4096),
+              packThres(4096),
+              maxPackNum(8),
+              packDequeueTimeout(5000),
+              packQueueDepth(64),
+              packThreadsNum(4) {
     // Load from environment variable
     char *env_p;
     if(env_p = std::getenv("INDEX_TYPE")) {
@@ -139,10 +169,21 @@ struct Options {
 struct ReadOptions {
   // Define the upper key (Non-Inclusive) for range query
   // Default: NULL
-  const Slice* upper_key;
+  Slice* upper_key;
+
+  // Potential user hint for the length of a scan (how many next after seek?)
+  // Default: 1 (adptively increase)
+  int scan_length;
+
+  // Potential user hint for the size of the value (packed or unpacked?)
+  // 0 -> auto, 1 -> unpacked, 2 -> packed
+  // Default: 0 (no hints)
+  int hint_packed;
 
   ReadOptions()
-      : upper_key(NULL) {
+      : upper_key(NULL),
+        scan_length(1),
+        hint_packed(0) {
   }
 };
 

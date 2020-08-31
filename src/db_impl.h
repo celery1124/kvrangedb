@@ -13,6 +13,7 @@
 #include "kvrangedb/db.h"
 #include "kvssd/kvssd.h"
 #include "kv_index.h"
+#include "blockingconcurrentqueue.h"
 
 #define MAX_INDEX_NUM 8
 
@@ -32,10 +33,27 @@ public:
     ready_ = true;
     cv_.notify_one();
   }
+  void notifyAll() {
+    std::unique_lock<std::mutex> lck(mtx_);
+    ready_ = true;
+    cv_.notify_all();
+  }
   void wait() {
     std::unique_lock<std::mutex> lck(mtx_);
     while (!ready_) cv_.wait(lck);
   }
+};
+
+struct packKVEntry {
+  uint64_t seq;
+  int size;
+  std::string key;
+  std::string value;
+  packKVEntry(int _size, const Slice& _key, const Slice& _val)
+              :size(_size) {
+                key = _key.ToString();
+                value = _val.ToString();
+              }
 };
 
 class DBImpl : public DB{
@@ -58,11 +76,23 @@ public:
   const Comparator* GetComparator() {return options_.comparator;}
 
 private:
+  const Options options_;
+
   kvssd::KVSSD *kvd_;
   KVIndex *key_idx_[MAX_INDEX_NUM];
 
-  const Options options_;
+  // monotonous seqence
+  uint64_t sequence_; // packed KV physical key
+  std::mutex seq_mutex_;
+  moodycamel::BlockingConcurrentQueue<packKVEntry*> pack_q_;
+  Monitor pack_q_wait_; // maintain queue depth
+  // consumer threads
+  int pack_threads_num;
+  std::thread **pack_threads_;
+  std::mutex *thread_m_;
+  bool *shutdown_;
 
+  void processQ(int id);
 public:
   // DEBUG ONLY
   void close_idx () {

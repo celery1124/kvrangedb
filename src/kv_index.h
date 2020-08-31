@@ -22,6 +22,9 @@ class IDXWriteBatch {
   // Store the key index
   virtual void Put(const Slice& key) = 0;
 
+  // Store the key translation index
+  virtual void Put(const Slice& lkey, const Slice& pkey) = 0;
+
   // Delete the key index
   virtual void Delete(const Slice& key) = 0;
 
@@ -73,6 +76,12 @@ class IDXIterator {
   // REQUIRES: Valid()
   virtual Slice key() const = 0;
 
+  // Return the pkey for the current entry.  The underlying storage for
+  // the returned slice is valid only until the next modification of
+  // the iterator.
+  // REQUIRES: Valid()
+  virtual Slice pkey() const = 0;
+
  private:
   // No copying allowed
   IDXIterator(const IDXIterator&);
@@ -88,6 +97,9 @@ class KVIndex {
   virtual ~KVIndex() {};
 
   virtual bool Put(const Slice& key) = 0;
+  virtual bool Put(const Slice& skey, const Slice& pkey) = 0;
+
+  virtual bool Get(const Slice& skey, std::string& pkey) = 0;
 
   virtual bool Delete(const Slice& key) = 0;
 

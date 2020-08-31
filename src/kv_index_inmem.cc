@@ -31,6 +31,9 @@ public:
   void Put(const Slice& key) {
     // do nothing
   }
+  void Put(const Slice& lkey, const Slice& pkey) {
+    // do nothing
+  }
   void Delete(const Slice& key) {
     // do nothing
   }
@@ -63,6 +66,9 @@ public:
     inmem::Slice ret_key = it_->key();
     return Slice(ret_key.data(), ret_key.size());
   }
+  Slice pkey() const {
+    return Slice(); /* NOT IMPLEMENT */
+  }
 private:
   inmem::InMem::Iterator *it_;
 };
@@ -74,6 +80,8 @@ public:
 
   // implmentations
   bool Put(const Slice& key);
+  bool Put(const Slice& skey, const Slice& pkey);
+  bool Get(const Slice& skey, std::string& pkey);
   bool Delete(const Slice& key);
   bool Write(IDXWriteBatch* updates);
   IDXIterator* NewIterator(const ReadOptions& options);
@@ -107,6 +115,16 @@ IDXWriteBatch* NewIDXWriteBatchInmem() {
 bool KVIndexInMem::Put(const Slice &key) {
   inmem::Slice put_key(key.data(), key.size());
   inmem_->Insert(&put_key);
+  return true;
+}
+
+bool KVIndexInMem::Put(const Slice &skey, const Slice &pkey) {
+  /** NOT IMPLEMENT **/
+  return true;
+}
+
+bool KVIndexInMem::Get(const Slice& skey, std::string& pkey) { 
+  /** NOT IMPLEMENT **/
   return true;
 }
 
