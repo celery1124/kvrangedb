@@ -197,6 +197,7 @@ DBIterator::DBIterator(DBImpl *db, const ReadOptions &options)
       val_queue_[i].clear();
     }
   }
+  //printf("prefetch_depth_ = %d\n", prefetch_depth_);
   it_ = new MergeIterator(db, options, db->options_.indexNum);
 }
 
@@ -361,28 +362,29 @@ void DBIterator::Seek(const Slice& target) {
   it_->Seek(target); 
   if (db_->options_.prefetchEnabled) {
     valid_ = valid_queue_[0] = it_->Valid();
-    if (it_->Valid())
+    if (it_->Valid()) {
       key_queue_[0] = it_->key().ToString();
       pkey_queue_[0] = it_->value().ToString();
+    }
+    // implicit next for prefetch
+    assert(queue_cur_ == 0);
+    for (int i = 1; i < prefetch_depth_; i++) {
+      it_->Next();
+      bool valid = it_->Valid();
+      if(valid) {
+        key_queue_[i] = (it_->key()).ToString();
+        pkey_queue_[i] = (it_->value()).ToString();
+        valid_queue_[i] = true;
+      }
+      else {
+        valid_queue_[i] = false;
+        break;
+      }
+    }
+    
   }
   else {
     valid_ = it_->Valid();
-  }
-
-  // implicit next for prefetch
-  assert(queue_cur_ == 0);
-  for (int i = 1; i < prefetch_depth_; i++) {
-    it_->Next();
-    bool valid = it_->Valid();
-    if(valid) {
-      key_queue_[i] = (it_->key()).ToString();
-      pkey_queue_[i] = (it_->value()).ToString();
-      valid_queue_[i] = true;
-    }
-    else {
-      valid_queue_[i] = false;
-      break;
-    }
   }
   
   std::chrono::duration<double, std::micro> missduration = (std::chrono::system_clock::now() - wcts);
