@@ -26,8 +26,8 @@ typedef struct {
     char*& vbuf;
     uint32_t& actual_len;
     void* args;
-    Async_get_context(char *&buf, uint32_t &len, void *args)
-    : vbuf(buf), actual_len(len), args(args) {};
+    Async_get_context(char *&_buf, uint32_t &_len, void *_args)
+    : vbuf(_buf), actual_len(_len), args(_args) {};
   } ;
 
   class KVSSD {
@@ -42,7 +42,6 @@ typedef struct {
       KVSSD(const char* dev_path) {
         memset(kvs_dev_path, 0, 32);
         memcpy(kvs_dev_path, dev_path, strlen(dev_path));
-        kvs_init_options options;
         kvs_init_env_opts(&options);
         options.memory.use_dpdk = 0;
         // options for asynchronized call
@@ -53,7 +52,6 @@ typedef struct {
         options.emul_config_file =  configfile;
         kvs_init_env(&options);
 
-        kvs_container_context ctx;
         kvs_open_device(dev_path, &dev);
         kvs_create_container(dev, "test", 4, &ctx);
         if (kvs_open_container(dev, "test", &cont_handle) == KVS_ERR_CONT_NOT_EXIST) {
