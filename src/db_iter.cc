@@ -59,7 +59,7 @@ public:
     delete [] children_; 
   };
 
-  bool Valid() const {return (current_ != NULL);};
+  bool Valid() const {return (current_ != NULL) && current_->Valid();};
   void SeekToFirst() {
     if (n_ == 1) { // fast path
       children_[0]->SeekToFirst();
@@ -369,19 +369,19 @@ void DBIterator::Seek(const Slice& target) {
     // implicit next for prefetch
     assert(queue_cur_ == 0);
     for (int i = 1; i < prefetch_depth_; i++) {
-      it_->Next();
-      bool valid = it_->Valid();
-      if(valid) {
-        key_queue_[i] = (it_->key()).ToString();
-        pkey_queue_[i] = (it_->value()).ToString();
-        valid_queue_[i] = true;
-      }
-      else {
-        valid_queue_[i] = false;
-        break;
+      if (it_->Valid()) {
+        it_->Next();
+        if(it_->Valid()) {
+          key_queue_[i] = (it_->key()).ToString();
+          pkey_queue_[i] = (it_->value()).ToString();
+          valid_queue_[i] = true;
+        }
+        else {
+          valid_queue_[i] = false;
+          break;
+        }
       }
     }
-    
   }
   else {
     valid_ = it_->Valid();
