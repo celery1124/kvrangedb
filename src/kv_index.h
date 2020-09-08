@@ -113,11 +113,13 @@ class KVIndex {
 };
 
 KVIndex* NewLSMIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name);
+KVIndex* NewRocksIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name);
 KVIndex* NewBTreeIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name);
 KVIndex* NewBaseIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name);
 KVIndex* NewInMemIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name);
 
 IDXWriteBatch* NewIDXWriteBatchLSM();
+IDXWriteBatch* NewIDXWriteBatchRocks();
 IDXWriteBatch* NewIDXWriteBatchBTree();
 IDXWriteBatch* NewIDXWriteBatchBase();
 IDXWriteBatch* NewIDXWriteBatchInmem();

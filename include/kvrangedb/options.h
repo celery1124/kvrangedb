@@ -20,6 +20,7 @@ class Slice;
 enum IndexType {
   LSM,
   LSMOPT,
+  ROCKS,
   BTREE,
   BASE,
 	INMEM
@@ -117,6 +118,8 @@ struct Options {
         indexType = LSM;
       else if (strcmp(env_p, "LSMOPT") == 0)
         indexType = LSMOPT;
+      else if (strcmp(env_p, "ROCKS") == 0)
+        indexType = ROCKS;
       else if (strcmp(env_p, "BTREE") == 0)
         indexType = BTREE;
       else if (strcmp(env_p, "BASE") == 0)

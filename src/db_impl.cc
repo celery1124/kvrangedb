@@ -54,6 +54,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
     else if (options.indexType == LSMOPT) {
       key_idx_[i] = NewLSMIndex(options, kvd_, indexName);
     }
+    else if (options.indexType == ROCKS) {
+      key_idx_[i] = NewRocksIndex(options, kvd_, indexName);
+    }
     else if (options.indexType == BTREE) {
       key_idx_[i] = NewBTreeIndex(options, kvd_, indexName);
     }
@@ -249,6 +252,8 @@ void DBImpl::processQ(int id) {
       // clean up
       free((char*) pack_key.data());
       free((char*) pack_val.data());
+      delete index_batch;
+
       if (pack_q_.size_approx() <= options_.packQueueDepth) 
       pack_q_wait_.notifyAll();
     }
@@ -286,7 +291,7 @@ Status DBImpl::Put(const WriteOptions& options,
     Monitor mon;
     kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
     // index write
-    int idx_id = (options_.indexNum == 0) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
+    int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
     key_idx_[idx_id]->Put(key);
     
     mon.wait(); // wait data I/O done
@@ -297,7 +302,7 @@ Status DBImpl::Put(const WriteOptions& options,
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
   kvssd::Slice del_key(key.data(), key.size());
 	kvd_->kv_delete(&del_key);
-  int idx_id = (options_.indexNum == 0) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
+  int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
   key_idx_[idx_id]->Delete(key);
   return Status();
 }
