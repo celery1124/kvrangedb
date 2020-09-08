@@ -10,6 +10,10 @@
 #include <vector>
 #include <mutex>
 #include <condition_variable>
+#include <iostream>
+#include <sys/time.h>
+#include <stdio.h>
+#include <unistd.h>
 
 namespace leveldb {
 
@@ -427,9 +431,12 @@ class KVWritableFileOpt : public WritableFile {
   kvssd::KVSSD* kvd_;
   std::vector<Monitor*> monList_;
 
+  //struct timeval start_;
  public:
   KVWritableFileOpt(kvssd::KVSSD* kvd, const std::string& fname)
-      : filename_(fname), kvd_(kvd), offset_(0) {  }
+      : filename_(fname), kvd_(kvd), offset_(0) { 
+        //gettimeofday(&start_, NULL);
+      }
 
   ~KVWritableFileOpt() { }
 
@@ -483,6 +490,7 @@ class KVWritableFileOpt : public WritableFile {
     monList_.push_back(mon);
 
     offset_ += valStr->size();
+    
     return Status::OK();
   }
 
@@ -495,6 +503,10 @@ class KVWritableFileOpt : public WritableFile {
       (*it)->wait();
       delete (*it);
     }
+    // struct timeval end;
+    // gettimeofday(&end, NULL);
+    // fprintf(stderr, "%llu ", (uint64_t)((end.tv_sec-start_.tv_sec)*1000.0 + (end.tv_usec-start_.tv_usec)/1000.0));
+    // fprintf(stderr, ".db file: %s, size %d bytes\n",filename_.c_str(), offset_);
     //fprintf(stderr, "KVWritable: %s, size %d bytes\n",filename_.c_str(), offset_);
     return Status::OK();
   }
@@ -505,11 +517,10 @@ class KVAppendableFileOpt : public WritableFile {
   std::string filename_;
   std::string value_;
   kvssd::KVSSD* kvd_;
-  bool synced;
 
  public:
   KVAppendableFileOpt(kvssd::KVSSD* kvd, const std::string& fname)
-      : filename_(fname), kvd_(kvd), synced(false) {  }
+      : filename_(fname), kvd_(kvd) {  }
 
   ~KVAppendableFileOpt() { }
 
@@ -524,7 +535,12 @@ class KVAppendableFileOpt : public WritableFile {
   }
 
   virtual Status Close() {
-    if (!synced) Sync();
+    //Status s = SyncDirIfManifest();
+    kvssd::Slice key (filename_);
+    kvssd::Slice val (value_);
+    kvd_->kv_store(&key, &val);
+    //kvd_->kv_append(&key, &val);
+    //printf("append: %s\n",filename_.c_str());
     return Status::OK();
   }
 
@@ -534,13 +550,12 @@ class KVAppendableFileOpt : public WritableFile {
 
   virtual Status Sync() {
     // Ensure new files referred to by the manifest are in the filesystem.
-    //Status s = SyncDirIfManifest();
-    kvssd::Slice key (filename_);
-    kvssd::Slice val (value_);
-    kvd_->kv_store(&key, &val);
-    //kvd_->kv_append(&key, &val);
-    //printf("append: %s\n",filename_.c_str());
-    synced = true;
+    // //Status s = SyncDirIfManifest();
+    // kvssd::Slice key (filename_);
+    // kvssd::Slice val (value_);
+    // kvd_->kv_store(&key, &val);
+    // //kvd_->kv_append(&key, &val);
+    // //printf("append: %s\n",filename_.c_str());
     return Status::OK();
   }
 };

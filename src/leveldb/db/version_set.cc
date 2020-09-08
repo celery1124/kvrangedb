@@ -43,7 +43,7 @@ static double MaxBytesForLevel(const Options* options, int level) {
 
   // Result for both level-0 and level-1
   //double result = 10. * 1048576.0;
-  double result = 1024.0 * 1024.0;
+  double result = 10.0 * 1048576.0;
   while (level > 1) {
     result *= 10;
     level--;

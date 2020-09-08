@@ -158,8 +158,9 @@ KVIndexLSM::KVIndexLSM(const Options& db_options, kvssd::KVSSD* kvd, std::string
   options.reuse_logs = false;
   //options.write_buffer_size = 128 << 10;
   //options.max_file_size = 128 << 10;
-  options.write_buffer_size = 1 << 20;
-  options.max_file_size = 1 << 20;
+  options.write_buffer_size = 16 << 20;
+  options.max_file_size = 8 << 20;
+  options.block_size = 16384;
 
   // apply db options
   cmp_ = new ComparatorLSM(db_options.comparator);
