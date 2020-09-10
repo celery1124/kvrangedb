@@ -25,7 +25,7 @@ kvssd:
 	$(CC) -shared -o $(HOME)/libs/libkvssd.so $(INCLUDES) $(KVSSD_SRCS) -L$(HOME)/libs -Wl,-rpath,$(HOME)/libs -lkvapi -lnuma $(CXXFLAG)
 
 rocksdb:
-	make -C $(HOME)/src/rocksdb/ shared_lib
+	make -C $(HOME)/src/rocksdb/ shared_lib -j8
 	cp $(HOME)/src/rocksdb/librocksdb* $(HOME)/libs
 
 leveldb:
