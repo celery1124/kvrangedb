@@ -152,6 +152,8 @@ private:
 
 KVIndexRocks::KVIndexRocks(const Options& db_options, kvssd::KVSSD* kvd, std::string& name) : name_(name), kvd_(kvd) {
   rocksdb::Options options;
+  options.IncreaseParallelism();
+  options.OptimizeLevelStyleCompaction();
   options.create_if_missing = true;
   options.max_open_files = 1000;
   options.compression = rocksdb::kNoCompression;
@@ -170,6 +172,8 @@ KVIndexRocks::KVIndexRocks(const Options& db_options, kvssd::KVSSD* kvd, std::st
 
   options.env = rocksdb::NewKVEnvOpt(rocksdb::Env::Default(), kvd);
   rocksdb::Status status = rocksdb::DB::Open(options, name, &db_);
+  if (status.ok()) printf("rocksdb open ok\n");
+  else printf("rocksdb open error\n");
 
   write_options_.disableWAL = true;
 }

@@ -171,6 +171,8 @@ KVIndexLSM::KVIndexLSM(const Options& db_options, kvssd::KVSSD* kvd, std::string
   else 
     options.env = leveldb::NewKVEnv(leveldb::Env::Default(), kvd);
   leveldb::Status status = leveldb::DB::Open(options, name, &db_);
+  if (status.ok()) printf("leveldb open ok\n");
+  else printf("leveldb open error\n");
 }
 
 KVIndexLSM::~KVIndexLSM() {
