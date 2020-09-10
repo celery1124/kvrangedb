@@ -535,12 +535,7 @@ class KVAppendableFileOpt : public WritableFile {
   }
 
   virtual Status Close() {
-    //Status s = SyncDirIfManifest();
-    kvssd::Slice key (filename_);
-    kvssd::Slice val (value_);
-    kvd_->kv_store(&key, &val);
-    //kvd_->kv_append(&key, &val);
-    //printf("append: %s\n",filename_.c_str());
+
     return Status::OK();
   }
 
@@ -550,12 +545,12 @@ class KVAppendableFileOpt : public WritableFile {
 
   virtual Status Sync() {
     // Ensure new files referred to by the manifest are in the filesystem.
-    // //Status s = SyncDirIfManifest();
-    // kvssd::Slice key (filename_);
-    // kvssd::Slice val (value_);
-    // kvd_->kv_store(&key, &val);
-    // //kvd_->kv_append(&key, &val);
-    // //printf("append: %s\n",filename_.c_str());
+    //Status s = SyncDirIfManifest();
+    kvssd::Slice key (filename_);
+    kvssd::Slice val (value_);
+    kvd_->kv_store(&key, &val);
+    //kvd_->kv_append(&key, &val);
+    //printf("append: %s\n",filename_.c_str());
     return Status::OK();
   }
 };
