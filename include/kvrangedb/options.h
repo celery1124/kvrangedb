@@ -89,11 +89,11 @@ struct Options {
   int packDequeueTimeout;
 
   // Depth of the packed KV queue
-  // Default: 64
+  // Default: 1024
   int packQueueDepth;
 
   // Number of threads to write packed KV
-  // Default: 4
+  // Default: 8
   int packThreadsNum;
 
   Options() : comparator(BytewiseComparator()),
@@ -109,8 +109,8 @@ struct Options {
               packThres(4096),
               maxPackNum(8),
               packDequeueTimeout(5000),
-              packQueueDepth(64),
-              packThreadsNum(4) {
+              packQueueDepth(1024),
+              packThreadsNum(8) {
     // Load from environment variable
     char *env_p;
     if(env_p = std::getenv("INDEX_TYPE")) {
