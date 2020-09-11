@@ -77,8 +77,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   for (int i = 0; i < pack_threads_num; i++) {
     shutdown_[i] = false;
     pack_threads_[i] = new std::thread(&DBImpl::processQ, this, i);
+    printf("Initiated worker thread %d\n", i);
   }
-
+  printf("Max Pack Size: %d\n", options_.packSize);
 }
 
 DBImpl::~DBImpl() {
@@ -87,8 +88,10 @@ DBImpl::~DBImpl() {
       std::string meta_name = std::to_string(i)+"/CURRENT";
       kvssd::Slice del_key_lsm(meta_name);
       kvd_->kv_delete(&del_key_lsm);
+      printf("Clean index\n");
     }
   }
+  sleep(1);
 
   // shutdown packing threads
   for (int i = 0; i < pack_threads_num; i++) { 
@@ -101,7 +104,7 @@ DBImpl::~DBImpl() {
   for (int i = 0; i < pack_threads_num; i++) { 
       pack_threads_[i]->join();
       delete pack_threads_[i];
-    printf("Shutdown worker thread %d\n", i);
+      printf("Shutdown worker thread %d\n", i);
   }
 
   delete [] pack_threads_;
@@ -227,6 +230,9 @@ void DBImpl::processQ(int id) {
       else if (options_.indexType == LSMOPT) {
         index_batch = NewIDXWriteBatchLSM();
       }
+      else if (options_.indexType == ROCKS) {
+        index_batch = NewIDXWriteBatchRocks();
+      }
       else if (options_.indexType == BTREE) {
         index_batch = NewIDXWriteBatchBTree();
       }
@@ -238,7 +244,6 @@ void DBImpl::processQ(int id) {
       }
 
       do_pack_KVs(seq, kvs, pack_size, pack_key, pack_val, index_batch);
-      
       
       // phyKV write
       Monitor mon;
@@ -317,6 +322,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     }
     else if (options_.indexType == LSMOPT) {
       idx_batch[i] = NewIDXWriteBatchLSM();
+    }
+    else if (options_.indexType == ROCKS) {
+      idx_batch[i] = NewIDXWriteBatchRocks();
     }
     else if (options_.indexType == BTREE) {
       idx_batch[i] = NewIDXWriteBatchBTree();
@@ -412,6 +420,7 @@ fallover:
     char *vbuf;
     int vlen;
     int ret = kvd_->kv_get(&get_key, vbuf, vlen);
+    
     if (ret == 0) {
       value->append(vbuf, vlen);
       free(vbuf);
@@ -453,6 +462,7 @@ fallover:
 
     if (ret == 0) {
       bool found = do_unpack_KVs(vbuf, vlen, key, value);
+      
       if (found) {
         free(vbuf);
         return Status();
