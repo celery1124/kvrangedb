@@ -71,6 +71,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       exit(-1);
     }
   } 
+  // load meta
+  load_meta(sequence_);
   pack_threads_ = new std::thread*[pack_threads_num];
   thread_m_ = new std::mutex[pack_threads_num];
   shutdown_ = new bool[pack_threads_num];
@@ -107,6 +109,9 @@ DBImpl::~DBImpl() {
   delete [] pack_threads_;
   delete [] thread_m_;
   delete [] shutdown_;
+
+  // save meta (sequence number)
+  save_meta();
 
   for (int i = 0; i < options_.indexNum; i++)
     delete key_idx_[i];

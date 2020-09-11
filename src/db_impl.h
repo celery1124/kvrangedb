@@ -93,6 +93,32 @@ private:
   bool *shutdown_;
 
   void processQ(int id);
+  void save_meta() {
+    std::string meta;
+    meta.append((char*)sequence_, sizeof(uint64_t));
+    kvssd::Slice meta_key("KVRangeDB_meta");
+    kvssd::Slice meta_val;
+    kvd_->kv_store(&meta_key, &meta_val);
+    printf("Finish saving KVRangeDB meta\n");
+  }
+  bool load_meta(uint64_t &seq) { 
+    char *vbuf;
+    int vsize;
+    kvssd::Slice meta_key("KVRangeDB_meta");
+    int found = kvd_->kv_get(&meta_key, vbuf, vsize); 
+    if (found != 0) {
+      free(vbuf);
+      printf("New KVRangeDB created\n");
+      return false; // no meta;
+    }
+    else {
+      free(vbuf);
+      seq = *((uint64_t*)vbuf);
+      printf("Load KVRangeDB meta\n");
+      return true;
+    }
+
+  }
 
   bool do_check_filter(const Slice& key) {
     /* NOT IMPLEMENT */
