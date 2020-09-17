@@ -41,11 +41,11 @@ void BaseOrder::Iterator::Seek(Slice *key) {
         Slice curr_key(curr_key_str);
         // filter out keys not in range
         if (base_->cmp_->Compare(*key, curr_key) >= 0) {
-          if (ordered_keys_.size() > scan_len_) {
+          ordered_keys_.insert(curr_key_str);
+          if (ordered_keys_.size() > scan_len_) { //remove last 
             auto last_it = --ordered_keys_.end();
             ordered_keys_.erase(last_it);
           }
-          ordered_keys_.insert(curr_key_str);
         }
         
         it_buffer += key_size;
