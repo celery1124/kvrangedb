@@ -31,8 +31,8 @@ void BaseOrder::Iterator::Seek(Slice *key) {
     bool iter_cont = base_->kvd_->kv_iter_next(KVIter_);
     uint8_t *it_buffer = KVIter_->buffer_;
     uint32_t key_size = 0;
-      
-      for(int i = 0;i < KVIter_->get_num_entries(); i++) {
+      int iter_num_entries = KVIter_->get_num_entries();
+      for(int i = 0;i < iter_num_entries; i++) {
         // get key size
         key_size = *((unsigned int*)it_buffer);
         it_buffer += sizeof(unsigned int);

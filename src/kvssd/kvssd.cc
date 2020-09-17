@@ -494,6 +494,7 @@ namespace kvssd {
     iter_ctx_next.private1 = iter->iter_info;
     iter_ctx_next.private2 = NULL;
 
+    iter->iter_info->iter_list.size = iter->buf_size_;
     memset(iter->iter_info->iter_list.it_list, 0, iter->buf_size_);
     int ret = kvs_iterator_next(cont_handle, iter->iter_info->iter_handle, &iter->iter_info->iter_list, &iter_ctx_next);
 
