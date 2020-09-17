@@ -480,6 +480,14 @@ namespace kvssd {
 
   int KVSSD::kv_iter::get_num_entries () {return iter_info->iter_list.num_entries;}
 
+  KVSSD::kv_iter::kv_iter (int buf_size) {
+    iter_info = (struct iterator_info *)malloc(sizeof(struct iterator_info));
+    iter_info->g_iter_mode.iter_type = KVS_ITERATOR_KEY;
+    iter_info->iter_list.size = buf_size;
+    buffer_ =(uint8_t*) kvs_malloc(buf_size, 4096);
+    iter_info->iter_list.it_list = (uint8_t*) buffer_;
+  }
+
   bool KVSSD::kv_iter_next(kv_iter *iter) {
     kvs_iterator_context iter_ctx_next;
     iter_ctx_next.option = iter->iter_info->g_iter_mode;
