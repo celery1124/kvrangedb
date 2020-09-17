@@ -17,8 +17,10 @@ namespace base {
 
 struct custom_cmp {
   explicit custom_cmp(Comparator *cmp) : cmp_(cmp) {}
-  bool operator() (Slice l, Slice r) const {
-    return (cmp_->Compare(l, r) < 0) ;
+  bool operator() (std::string l, std::string r) const {
+    Slice ll(l);
+    Slice rr(r);
+    return (cmp_->Compare(ll, rr) < 0) ;
   }
   Comparator *cmp_;
 };
@@ -35,8 +37,8 @@ public:
     kvssd::KVSSD::kv_iter *KVIter_;
     BaseOrder *base_;
     std::vector<std::string> keys_;
-    std::set<Slice, custom_cmp> ordered_keys_;
-    std::set<Slice, custom_cmp>::iterator it_;
+    std::set<std::string, custom_cmp> ordered_keys_;
+    std::set<std::string, custom_cmp>::iterator it_;
   public:
     Iterator (BaseOrder *base, int scan_len);
     ~Iterator () ;
