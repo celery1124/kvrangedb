@@ -38,7 +38,7 @@ public:
     std::set<Slice, custom_cmp> ordered_keys_;
     std::set<Slice, custom_cmp>::iterator it_;
   public:
-    Iterator (BaseOrder *base, int buf_size, int scan_len);
+    Iterator (BaseOrder *base, int scan_len);
     ~Iterator () ;
     void Seek(Slice *key);
     void SeekToFirst();
@@ -46,7 +46,7 @@ public:
     bool Valid();
     Slice key();
   };
-  Iterator* NewIterator(int buf_size, int scan_len);
+  Iterator* NewIterator(int scan_len);
 
 private:
     Comparator *cmp_;

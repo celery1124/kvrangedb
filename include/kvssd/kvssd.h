@@ -89,7 +89,7 @@ namespace kvssd {
         uint8_t *buffer_;
         struct iterator_info *iter_info;
       public:
-        kv_iter(int buf_size);
+        kv_iter(int buf_size = 32768); // current kvssd iter buffer size is fixed 32KB
         ~kv_iter() { if(buffer_) free(buffer_); }
         int get_num_entries (); 
       };

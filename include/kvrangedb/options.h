@@ -183,15 +183,14 @@ struct ReadOptions {
   // Default: 0 (no hints)
   int hint_packed;
 
-  // Buffer size for base iterator in Bytes
-  // Default: 4MB
-  int base_iter_buffer_size;
+  // // Buffer size for base iterator in Bytes
+  // // Default: 4MB
+  // int base_iter_buffer_size;
 
   ReadOptions()
       : upper_key(NULL),
         scan_length(1),
-        hint_packed(0),
-        base_iter_buffer_size(4<<20) {
+        hint_packed(0) {
   }
 };
 

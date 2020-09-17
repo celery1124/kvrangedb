@@ -8,11 +8,11 @@
 
 namespace base {
 
-BaseOrder::Iterator::Iterator (BaseOrder *base, int buf_size, int scan_len) 
+BaseOrder::Iterator::Iterator (BaseOrder *base, int scan_len) 
   : scan_len_(scan_len), base_(base), ordered_keys_(custom_cmp(base->cmp_)) {
   // sanctity check
   if (scan_len_ <= 0) scan_len_ = 1;
-  KVIter_ = new kvssd::KVSSD::kv_iter(buf_size);
+  KVIter_ = new kvssd::KVSSD::kv_iter();
   base_->kvd_->kv_iter_open(KVIter_);
 }
 
@@ -67,8 +67,8 @@ Slice BaseOrder::Iterator::key() {
     return *it_;
 }
 
-BaseOrder::Iterator* BaseOrder::NewIterator(int buf_size, int scan_len) {
-    return new Iterator(this, buf_size, scan_len);
+BaseOrder::Iterator* BaseOrder::NewIterator(int scan_len) {
+    return new Iterator(this, scan_len);
 }
 
 } // end namespace base
