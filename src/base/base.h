@@ -31,20 +31,22 @@ public:
 
   class Iterator {
   private: 
+    int scan_len_;
+    kvssd::KVSSD::kv_iter *KVIter_;
     BaseOrder *base_;
     std::vector<std::string> keys_;
     std::set<Slice, custom_cmp> ordered_keys_;
     std::set<Slice, custom_cmp>::iterator it_;
   public:
-    Iterator (BaseOrder *base);
-    ~Iterator () {}
+    Iterator (BaseOrder *base, int buf_size, int scan_len);
+    ~Iterator () ;
     void Seek(Slice *key);
     void SeekToFirst();
     void Next();
     bool Valid();
     Slice key();
   };
-  Iterator* NewIterator();
+  Iterator* NewIterator(int buf_size, int scan_len);
 
 private:
     Comparator *cmp_;

@@ -44,10 +44,13 @@ public:
 
 class IDXIteratorBase: public IDXIterator {
 public:
-  IDXIteratorBase(base::BaseOrder *base_, const ReadOptions& options) {
-    it_ = base_->NewIterator();
+  IDXIteratorBase(base::BaseOrder *base, const ReadOptions& options) : base_(base) {
+    it_ = base_->NewIterator(options.base_iter_buffer_size, options.scan_length);
   }
-  ~IDXIteratorBase() { delete it_; }
+  ~IDXIteratorBase() { 
+    delete it_; 
+    delete base_;
+  }
 
   bool Valid() const {it_->Valid();}
   void SeekToFirst() {it_->SeekToFirst();}
@@ -70,6 +73,7 @@ public:
     return Slice(); /* NOT IMPLEMENT */
   }
 private:
+  base::BaseOrder* base_;
   base::BaseOrder::Iterator *it_;
 };
 
@@ -88,7 +92,6 @@ public:
  
 private:
   std::string name_;
-  base::BaseOrder* base_;
   kvssd::KVSSD* kvd_;
   ComparatorBase* cmp_;
 };
@@ -96,12 +99,10 @@ private:
 KVIndexBase::KVIndexBase(const Options& db_options, kvssd::KVSSD* kvd, std::string& name) : name_(name), kvd_(kvd) {
   // apply db options
   cmp_ = new ComparatorBase(db_options.comparator);
-  base_ = new base::BaseOrder(cmp_, kvd);
 }
 
 KVIndexBase::~KVIndexBase() {
   delete cmp_;
-  delete base_;
 }
 
 KVIndex* NewBaseIndex(const Options& options, kvssd::KVSSD* kvd, std::string& name) {
@@ -138,6 +139,7 @@ bool KVIndexBase::Write(IDXWriteBatch* updates) {
 }
 
 IDXIterator* KVIndexBase::NewIterator(const ReadOptions& options) {
+  base::BaseOrder* base_ = new base::BaseOrder(cmp_, kvd_);
   return new IDXIteratorBase(base_, options);
 }
 

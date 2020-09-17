@@ -15,7 +15,7 @@
 
 namespace kvssd {
 
-typedef struct {
+  typedef struct {
       std::atomic<uint32_t> num_store{0};
       std::atomic<uint32_t> num_append{0};
       std::atomic<uint32_t> num_retrieve{0};
@@ -38,6 +38,8 @@ typedef struct {
       kvs_container_context ctx;
       kvs_container_handle cont_handle;
       kvd_stats stats_;
+
+      friend class kv_iter;
     public:
       KVSSD(const char* dev_path) {
         memset(kvs_dev_path, 0, 32);
@@ -79,7 +81,22 @@ typedef struct {
       kvs_result kv_pget(const Slice *key, char*& vbuf, int count, int offset);
       kvs_result kv_delete(const Slice *key);
 
-      kvs_result kv_scan_keys(std::vector<std::string> &keys);
+      kvs_result kv_scan_keys(std::vector<std::string> &keys, int buf_size = 32768);
+
+      class kv_iter {
+      public:
+        int buf_size_;
+        uint8_t *buffer_;
+        struct iterator_info *iter_info;
+      public:
+        kv_iter(int buf_size);
+        ~kv_iter() { if(buffer_) free(buffer_); }
+        int get_num_entries (); 
+      };
+      bool kv_iter_open(kv_iter *iter);
+      bool kv_iter_next(kv_iter *iter); // true-continue, false-end
+      bool kv_iter_close(kv_iter *iter);
+
   };
 } // end namespace
 
