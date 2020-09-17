@@ -40,7 +40,7 @@ void BaseOrder::Iterator::Seek(Slice *key) {
         std::string curr_key_str((char*)it_buffer, key_size);
         Slice curr_key(curr_key_str);
         // filter out keys not in range
-        if (base_->cmp_->Compare(*key, curr_key) >= 0) {
+        if (base_->cmp_->Compare(curr_key, *key) >= 0) {
           ordered_keys_.insert(curr_key_str);
           if (ordered_keys_.size() > scan_len_) { //remove last 
             auto last_it = --ordered_keys_.end();
