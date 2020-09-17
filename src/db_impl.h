@@ -95,7 +95,7 @@ private:
   void processQ(int id);
   void save_meta() {
     std::string meta;
-    meta.append((char*)sequence_, sizeof(uint64_t));
+    meta.append((char*)&sequence_, sizeof(uint64_t));
     kvssd::Slice meta_key("KVRangeDB_meta");
     kvssd::Slice meta_val;
     kvd_->kv_store(&meta_key, &meta_val);
