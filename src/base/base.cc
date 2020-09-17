@@ -5,6 +5,8 @@
 
 #include "base.h"
 #include <string>
+#include <chrono>
+#include <iostream>
 
 namespace base {
 
@@ -27,8 +29,12 @@ void BaseOrder::Iterator::SeekToFirst() {
 }
 
 void BaseOrder::Iterator::Seek(Slice *key) {
+  std::chrono::duration<double> wctduration(0);
   while (true) {
+
+    auto wcts = std::chrono::system_clock::now();
     bool iter_cont = base_->kvd_->kv_iter_next(KVIter_);
+    wctduration += (std::chrono::system_clock::now() - wcts);
     uint8_t *it_buffer = KVIter_->buffer_;
     uint32_t key_size = 0;
       int iter_num_entries = KVIter_->get_num_entries();
@@ -52,6 +58,7 @@ void BaseOrder::Iterator::Seek(Slice *key) {
       }
       if (!iter_cont) break; // finish iteration
   }
+  std::cout << "Base::Iterator::Seek retrieving keys in " << wctduration.count() << " seconds [Wall Clock]" << std::endl;
   it_ = ordered_keys_.begin();
 }
 
