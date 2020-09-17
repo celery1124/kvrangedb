@@ -29,6 +29,7 @@ void BaseOrder::Iterator::SeekToFirst() {
 }
 
 void BaseOrder::Iterator::Seek(Slice *key) {
+  auto wcts_start = std::chrono::system_clock::now();
   std::chrono::duration<double> wctduration(0);
   while (true) {
 
@@ -58,7 +59,10 @@ void BaseOrder::Iterator::Seek(Slice *key) {
       }
       if (!iter_cont) break; // finish iteration
   }
-  std::cout << "Base::Iterator::Seek retrieving keys in " << wctduration.count() << " seconds [Wall Clock]" << std::endl;
+
+  std::chrono::duration<double> wctduration_all = (std::chrono::system_clock::now() - wcts_start);
+  std::cerr << "Base::Iterator::Seek retrieving keys in " << wctduration.count() << " seconds [Wall Clock]" << std::endl;
+  std::cerr << "Base::Iterator::Seek processing keys in " << wctduration_all.count() - wctduration.count() << " seconds [Wall Clock]" << std::endl;
   it_ = ordered_keys_.begin();
 }
 
