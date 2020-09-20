@@ -4,6 +4,7 @@
 * by Mian Qin
 */
 #include <mutex>
+#include <iostream>
 #include <condition_variable>
 #include <unordered_map>
 #include "kvrangedb/iterator.h"
@@ -346,13 +347,14 @@ void DBIterator::Seek(const Slice& target) {
     char *vbuf;
     int vlen;
     kvs_result ret;
-    ret = kvd_->kv_get(&probe_key, vbuf, vlen);
+    ret = kvd_->kv_get(&probe_key, vbuf, vlen, 256<<10);
     bool helperHit = (ret!=KVS_ERR_KEY_NOT_EXIST) && isHelperKV(vbuf, vlen);
     if (helperHit) { // fast path
       packedKVs_.append(vbuf+sizeof(int), vlen-sizeof(int));
       isPacked_ = true;
       valid_ = true;
       hitCnt++;
+      free(vbuf);
       std::chrono::duration<double, std::micro> hitduration = (std::chrono::system_clock::now() - wcts);
       hitCost += hitduration.count();
       return;
