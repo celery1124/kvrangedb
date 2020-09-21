@@ -164,6 +164,9 @@ struct Options {
     if (env_p = std::getenv("HELPER_TRAINING_THRES")) {
       helperTrainingThres = atoi(env_p);
     }
+    if (env_p = std::getenv("PACK_DEQUEUE_TIMEOUT")) {
+      packDequeueTimeout = atoi(env_p);
+    }
   };
 };
 
