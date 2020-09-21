@@ -84,6 +84,7 @@ private:
   // monotonous seqence
   uint64_t sequence_; // packed KV physical key
   std::mutex seq_mutex_;
+  std::mutex mutex_;
   moodycamel::BlockingConcurrentQueue<packKVEntry*> pack_q_;
   Monitor pack_q_wait_; // maintain queue depth
   // consumer threads

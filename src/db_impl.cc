@@ -251,13 +251,19 @@ void DBImpl::processQ(int id) {
       do_pack_KVs(seq, kvs, pack_size, pack_key, pack_val, index_batch);
       
       // phyKV write
-      Monitor mon;
-      kvd_->kv_store_async(&pack_key, &pack_val, on_io_complete, &mon);
-      
-      // index write
-      key_idx_[0]->Write(index_batch); // pack only support single index tree
+      {
+        std::unique_lock<std::mutex> lock(mutex_);
+        kvd_->kv_store(&pack_key, &pack_val);
+        key_idx_[0]->Write(index_batch); // pack only support single index tree
+      }
 
-      mon.wait(); // wait data I/O done
+      // Monitor mon;
+      // kvd_->kv_store_async(&pack_key, &pack_val, on_io_complete, &mon);
+      
+      // // index write
+      // key_idx_[0]->Write(index_batch); // pack only support single index tree
+
+      // mon.wait(); // wait data I/O done
       
       // clean up
       free((char*) pack_key.data());
