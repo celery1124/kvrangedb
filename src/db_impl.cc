@@ -17,6 +17,9 @@ extern double hitCost;
 extern double missCost;
 extern double hitNextCost;
 extern double missNextCost;
+int bloomHitCnt = 0;
+int bloomFPCnt = 0;
+int bloomMissCnt = 0;
 namespace kvrangedb {
 
 // WriteBatch definition
@@ -94,6 +97,11 @@ DBImpl::~DBImpl() {
     }
   }
   sleep(1);
+
+  if (options_.manualCompaction) {
+    ManualCompaction();
+    BuildFilter();
+  }
 
   // shutdown packing threads
   for (int i = 0; i < pack_threads_num; i++) { 
@@ -370,6 +378,9 @@ Status DBImpl::Get(const ReadOptions& options,
                      std::string* value) {
   bool possible_packed = true;
   bool possible_unpacked = true;
+  if (options_.manualCompaction) { // capture hot query
+    hot_keys_[std::string(key.data(), key.size())]++;
+  }
   if (options.hint_packed == 2) { // small value
     // index lookup
     Slice lkey(key.data(), key.size());
@@ -418,9 +429,10 @@ Status DBImpl::Get(const ReadOptions& options,
 
   // auto (fall over)
 fallover:
-  // bloom filter check /* NOT IMPLEMENT */
+  // bloom filter check 
   bool filter_found = do_check_filter(key);
-  if(possible_unpacked && filter_found) {
+  if(possible_unpacked && filter_found) { // filter hit
+    bloomHitCnt++;
     kvssd::Slice get_key(key.data(), key.size());
     char *vbuf;
     int vlen;
@@ -436,7 +448,8 @@ fallover:
     }
   }
 
-  if (possible_packed) {
+  if (possible_packed) { // filter miss
+    bloomMissCnt++;
     // index lookup
     Slice lkey(key.data(), key.size());
     std::string pkey;
@@ -445,6 +458,7 @@ fallover:
       return Status().NotFound(Slice());
     }
     if(pkey.size() == 0) { // filter false positive
+      bloomFPCnt++;
       kvssd::Slice get_key(key.data(), key.size());
       char *vbuf;
       int vlen;
@@ -484,6 +498,61 @@ fallover:
 
 Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   return NewDBIterator(this, options);
+}
+
+void DBImpl::ManualCompaction() {
+  int pack_cnt = 0;
+  int key_cnt = 0;
+  const ReadOptions options;
+  IDXIterator *it_ = key_idx_[0]->NewIterator(options);
+  it_->SeekToFirst();
+  while(it_->Valid()) {
+    Slice lkey = it_->key();
+    Slice pkey = it_->pkey();
+
+    if (pkey.size() && hot_keys_[std::string(lkey.data(), lkey.size())] == 0) {
+      // pack cold KVs
+      kvssd::Slice cold_key(lkey.data(), lkey.size());
+      char *vbuf;
+      int vlen;
+      int ret = kvd_->kv_get(&cold_key, vbuf, vlen);
+      Slice cold_val(vbuf, vlen);
+      if (ret != 0) {
+        free(vbuf);
+        printf("ManualCompaction, cold keys not found\n");
+        exit(0);
+      }
+      int size = get_phyKV_size(lkey, cold_val);
+      packKVEntry *item = new packKVEntry(size, lkey, cold_val);
+      while (pack_q_.size_approx() > options_.packQueueDepth) {
+        pack_q_wait_.reset();
+        pack_q_wait_.wait();
+      }
+      pack_q_.enqueue(item);
+      pack_cnt++;
+
+      // delete unpacked KV
+      free(vbuf);
+      kvd_->kv_delete(&cold_key);
+    }
+    it_->Next();
+    key_cnt++;
+    if (key_cnt % 1000000 == 0) printf("[ManualCompaction] total KVs %d, packed KVs %d\n", key_cnt, pack_cnt);
+  }
+
+  delete it_;
+}
+
+void DBImpl::BuildFilter() {
+  bf_.clear();
+  BloomFilter bf(options_.filterBitsPerKey);
+  int key_cnt = hot_keys_.size();
+  std::vector<Slice> tmp_keys;
+  for (auto it = hot_keys_.begin(); it != hot_keys_.end(); ++it) {
+    tmp_keys.push_back(Slice(it->first));
+  }
+  bf.CreateFilter(&tmp_keys[0], key_cnt, &bf_);
+  printf("Bloom Filter created\n");
 }
 
 Status DB::Open(const Options& options, const std::string& dbname,

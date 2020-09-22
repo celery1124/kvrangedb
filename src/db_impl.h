@@ -10,10 +10,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string>
+#include <unordered_map>
 #include "kvrangedb/db.h"
 #include "kvssd/kvssd.h"
 #include "kv_index.h"
 #include "blockingconcurrentqueue.h"
+#include "bloom.h"
 
 #define MAX_INDEX_NUM 8
 
@@ -91,15 +93,35 @@ private:
   std::thread **pack_threads_;
   std::mutex *thread_m_;
   bool *shutdown_;
+  
+  std::unordered_map<std::string, int> hot_keys_;
+  std::string bf_;
 
   void processQ(int id);
   void save_meta() {
     std::string meta;
     meta.append((char*)&sequence_, sizeof(uint64_t));
     kvssd::Slice meta_key("KVRangeDB_meta");
-    kvssd::Slice meta_val;
+    kvssd::Slice meta_val(meta);
     kvd_->kv_store(&meta_key, &meta_val);
     printf("Finish saving KVRangeDB meta\n");
+
+    if (bf_.size() && options_.manualCompaction) {
+      const int MAX_V_SIZE = 2<<20; // 2MB max value size
+      char *p = &bf_[0];
+      int write_bytes = 0;
+      int bf_kv_cnt = 0;
+      while(write_bytes < bf_.size()) {
+        int vlen = bf_.size() - write_bytes > MAX_V_SIZE ? MAX_V_SIZE : bf_.size() - write_bytes;
+        std::string bf_key_str = "KVRangeDB_bf"+std::to_string(bf_kv_cnt++);
+        kvssd::Slice bf_key(bf_key_str);
+        kvssd::Slice bf_val(p, vlen);
+        kvd_->kv_store(&bf_key, &bf_val);
+        p += vlen;
+        write_bytes += vlen;
+      }
+      printf("Finish saving Bloom Filter, total size %d\n", bf_.size());
+    }
   }
   bool load_meta(uint64_t &seq) { 
     char *vbuf;
@@ -114,16 +136,43 @@ private:
     else {
       free(vbuf);
       seq = *((uint64_t*)vbuf);
-      printf("Load KVRangeDB meta\n");
+      printf("Load KVRangeDB meta, seq# %llu\n", seq);
       return true;
+    }
+
+    // load bloom filter
+    int bf_kv_cnt = 0;
+    while (true) {
+      std::string bf_key_str = "KVRangeDB_bf"+std::to_string(bf_kv_cnt++);
+      kvssd::Slice bf_key(bf_key_str);
+      int found = kvd_->kv_get(&meta_key, vbuf, vsize); 
+      if (found) {
+        bf_.append(vbuf, vsize);
+        free(vbuf);
+      }
+      else {
+        printf("Finish loading bloom filter, total size %d\n", bf_.size());
+        break;
+      }
     }
 
   }
 
   bool do_check_filter(const Slice& key) {
-    /* NOT IMPLEMENT */
-    return false;
+    
+    if (bf_.size()) {
+      BloomFilter bf(options_.filterBitsPerKey);
+      return bf.KeyMayMatch(key, bf_);
+    }
+    else { // mo filter
+      return false;
+    }
+    
   }
+
+  void ManualCompaction();
+  void BuildFilter();
+
 public:
   // DEBUG ONLY
   void close_idx () {

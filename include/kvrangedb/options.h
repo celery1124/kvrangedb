@@ -96,6 +96,14 @@ struct Options {
   // Default: 8
   int packThreadsNum;
 
+  // Manual compaction
+  // Default: false
+  bool manualCompaction;
+
+  // Bits per key for bloom filter
+  // Default: 8
+  int filterBitsPerKey;
+
   Options() : comparator(BytewiseComparator()),
               indexType(LSM),
               cleanIndex(false),
@@ -110,7 +118,9 @@ struct Options {
               maxPackNum(8),
               packDequeueTimeout(5000),
               packQueueDepth(1024),
-              packThreadsNum(8) {
+              packThreadsNum(8),
+              manualCompaction(false),
+              filterBitsPerKey(8) {
     // Load from environment variable
     char *env_p;
     if(env_p = std::getenv("INDEX_TYPE")) {
@@ -166,6 +176,13 @@ struct Options {
     }
     if (env_p = std::getenv("PACK_DEQUEUE_TIMEOUT")) {
       packDequeueTimeout = atoi(env_p);
+    }
+
+    if(env_p = std::getenv("MANUAL_COMPACTION")) {
+      if (strcmp(env_p, "TRUE") == 0 || strcmp(env_p, "true") == 0)
+        manualCompaction = true;
+      else
+        manualCompaction = false;
     }
   };
 };
