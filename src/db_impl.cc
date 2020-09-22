@@ -4,6 +4,7 @@
 * by Mian Qin
 */
 #include <mutex>
+#include <atomic>
 #include <condition_variable>
 #include "kvrangedb/db.h"
 #include "kvrangedb/iterator.h"
@@ -17,9 +18,9 @@ extern double hitCost;
 extern double missCost;
 extern double hitNextCost;
 extern double missNextCost;
-int bloomHitCnt = 0;
-int bloomFPCnt = 0;
-int bloomMissCnt = 0;
+std::atomic<uint32_t> bloomHitCnt{0};
+std::atomic<uint32_t> bloomFPCnt{0};
+std::atomic<uint32_t> bloomMissCnt{0};
 namespace kvrangedb {
 
 // WriteBatch definition
@@ -130,8 +131,9 @@ DBImpl::~DBImpl() {
   printf("hitCnt = %d\n", hitCnt);
   printf("hitCost = %.3f, missCost = %.3f\n", hitCost, missCost);
   printf("hitNextCost = %.3f, missNextCost = %.3f\n", hitNextCost, missNextCost);
-  printf("bloomHitCnt = %d, bloomFPCnt = %d, bloomMissCnt = %d\n", bloomHitCnt, bloomFPCnt, bloomMissCnt);
-  printf("bloomHitRatio = %.3f\n", (double)(bloomHitCnt-bloomFPCnt)/(bloomHitCnt+bloomMissCnt));
+  printf("bloomHitCnt = %d, bloomFPCnt = %d, bloomMissCnt = %d\n", bloomHitCnt.load(), bloomFPCnt.load(), bloomMissCnt.load());
+  printf("bloomHitRatio = %.3f\n", (double)(bloomHitCnt.load()-bloomFPCnt.load())/(bloomHitCnt.load()+bloomMissCnt.load()));
+  printf("bloomFPRatio = %.3f\n", (double)bloomFPCnt.load()/(bloomHitCnt.load()+bloomMissCnt.load()));
 }
 
 // bulk dequeue, either dequeue max_size or wait for time out
@@ -435,7 +437,7 @@ fallover:
   // bloom filter check 
   bool filter_found = do_check_filter(key);
   if(possible_unpacked && filter_found) { // filter hit
-    bloomHitCnt++;
+    bloomHitCnt.fetch_add(1, std::memory_order_relaxed);
     kvssd::Slice get_key(key.data(), key.size());
     char *vbuf;
     int vlen;
@@ -452,7 +454,7 @@ fallover:
   }
 
   if (possible_packed) { // filter miss
-    bloomMissCnt++;
+    bloomMissCnt.fetch_add(1, std::memory_order_relaxed);
     // index lookup
     Slice lkey(key.data(), key.size());
     std::string pkey;
@@ -461,7 +463,7 @@ fallover:
       return Status().NotFound(Slice());
     }
     if(pkey.size() == 0) { // filter false positive
-      bloomFPCnt++;
+      bloomFPCnt.fetch_add(1, std::memory_order_relaxed);
       kvssd::Slice get_key(key.data(), key.size());
       char *vbuf;
       int vlen;
