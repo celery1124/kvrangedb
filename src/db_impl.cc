@@ -512,7 +512,7 @@ void DBImpl::ManualCompaction() {
     Slice lkey = it_->key();
     Slice pkey = it_->pkey();
 
-    if (pkey.size() && hot_keys_[std::string(lkey.data(), lkey.size())] == 0) {
+    if (pkey.size() == 0 && hot_keys_.find(std::string(lkey.data(), lkey.size())) == hot_keys_.end()) {
       // pack cold KVs
       kvssd::Slice cold_key(lkey.data(), lkey.size());
       char *vbuf;
@@ -541,7 +541,7 @@ void DBImpl::ManualCompaction() {
     key_cnt++;
     if (key_cnt % 1000000 == 0) printf("[ManualCompaction] total KVs %d, packed KVs %d\n", key_cnt, pack_cnt);
   }
-
+  printf("[ManualCompaction] total KVs %d, packed KVs %d\n", key_cnt, pack_cnt);
   delete it_;
 }
 
@@ -554,7 +554,7 @@ void DBImpl::BuildFilter() {
     tmp_keys.push_back(Slice(it->first));
   }
   bf.CreateFilter(&tmp_keys[0], key_cnt, &bf_);
-  printf("Bloom Filter created\n");
+  printf("Bloom Filter created, %d keys, %d bytes\n", key_cnt, bf_.size());
 }
 
 Status DB::Open(const Options& options, const std::string& dbname,

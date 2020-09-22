@@ -124,6 +124,7 @@ private:
     }
   }
   bool load_meta(uint64_t &seq) { 
+    bool newDB;
     char *vbuf;
     int vsize;
     kvssd::Slice meta_key("KVRangeDB_meta");
@@ -131,13 +132,13 @@ private:
     if (found != 0) {
       free(vbuf);
       printf("New KVRangeDB created\n");
-      return false; // no meta;
+      newDB = false; // no meta;
     }
     else {
       free(vbuf);
       seq = *((uint64_t*)vbuf);
       printf("Load KVRangeDB meta, seq# %llu\n", seq);
-      return true;
+      newDB = true;
     }
 
     // load bloom filter
@@ -145,8 +146,8 @@ private:
     while (true) {
       std::string bf_key_str = "KVRangeDB_bf"+std::to_string(bf_kv_cnt++);
       kvssd::Slice bf_key(bf_key_str);
-      int found = kvd_->kv_get(&meta_key, vbuf, vsize); 
-      if (found) {
+      int found = kvd_->kv_get(&bf_key, vbuf, vsize); 
+      if (found == 0) {
         bf_.append(vbuf, vsize);
         free(vbuf);
       }
@@ -155,7 +156,7 @@ private:
         break;
       }
     }
-
+    return newDB;
   }
 
   bool do_check_filter(const Slice& key) {
