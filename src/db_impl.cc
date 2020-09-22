@@ -383,8 +383,12 @@ Status DBImpl::Get(const ReadOptions& options,
   bool possible_packed = true;
   bool possible_unpacked = true;
   if (options_.manualCompaction) { // capture hot query
-    std::unique_lock<std::mutex> lock(seq_mutex_);
-    hot_keys_[std::string(key.data(), key.size())]++;
+    {
+      std::unique_lock<std::mutex> lock(seq_mutex_);
+      hot_keys_[std::string(key.data(), key.size())]++;
+    }
+    value->append("dummy value");
+    return Status();
   }
   if (options.hint_packed == 2) { // small value
     // index lookup
