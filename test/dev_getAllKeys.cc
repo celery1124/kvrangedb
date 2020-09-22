@@ -21,10 +21,15 @@
 #include "kvssd/kvssd.h"
 
 int main () {
-  kvssd::KVSSD *kvd_ = new kvssd::KVSSD("/dev/nvme1n1");
+  std::string dev_name = "/dev/nvme1n1";
+
+  auto wcts = std::chrono::system_clock::now();
+  kvssd::KVSSD *kvd_ = new kvssd::KVSSD(dev_name.c_str());
   std::vector<std::string> keys;
   kvd_->kv_scan_keys(keys);
 
-  printf("Total keys in device(%s) : %d\n", keys.size());
+  std::chrono::duration<double> wctduration = (std::chrono::system_clock::now() - wcts);
+  printf("Total keys in device(%s) : %d\n", dev_name.c_str(), keys.size());
+  std::cout << "Finished in " << wctduration.count() << " seconds [Wall Clock]" << std::endl;
   return 0; 
 }
