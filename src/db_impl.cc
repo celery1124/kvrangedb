@@ -564,9 +564,12 @@ void DBImpl::ManualCompaction() {
     }
 
     mon.wait();
+
+    Monitor mon_d;
+    std::mutex m_d;
+    Compaction_context *ctx_d = new Compaction_context {&m_d, 0, fetch_num, &mon_d};
     for (int i = 0; i < fetch_num; i++) {
       Slice lkey (key_batch[i]);
-      kvssd::Slice cold_key(lkey.data(), lkey.size());
       Slice cold_val (vbuf_list[i], actual_vlen_list[i]);
       int size = get_phyKV_size(lkey, cold_val);
       packKVEntry *item = new packKVEntry(size, lkey, cold_val);
@@ -576,16 +579,10 @@ void DBImpl::ManualCompaction() {
       }
       pack_q_.enqueue(item);
       pack_cnt++;
-      kvd_->kv_delete(&cold_key);
+      kvd_->kv_delete_async(&fetch_key_list[i], on_compact_del_complete, (void*) ctx_d);
       free(vbuf_list[i]);
     }
 
-    Monitor mon_d;
-    std::mutex m_d;
-    Compaction_context *ctx_d = new Compaction_context {&m_d, 0, fetch_num, &mon_d};
-    for (int i = 0; i < fetch_num; i++) {
-      kvd_->kv_delete_async(&fetch_key_list[i], on_compact_del_complete, (void*) ctx_d);
-    }
     mon_d.wait();
 
     // clean up
