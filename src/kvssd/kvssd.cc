@@ -37,14 +37,15 @@ namespace kvssd {
       if(ioctx->value) free(ioctx->value);
       break;
     }
-    // case IOCB_ASYNC_DEL_CMD : {
-    //   void (*callback_del) (void *) = (void (*)(void *))ioctx->private1;
-    //   void *args_del = (void *)ioctx->private2;
-    //   if (callback_del != NULL) {
-    //     callback_del((void *)args_del);
-    //   }
-    //   break;
-    // }
+    case IOCB_ASYNC_DEL_CMD : {
+      void (*callback_del) (void *) = (void (*)(void *))ioctx->private1;
+      void *args_del = (void *)ioctx->private2;
+      if (callback_del != NULL) {
+        callback_del((void *)args_del);
+      }
+      if(ioctx->key) free(ioctx->key);
+      break;
+    }
     default : {
       printf("aio cmd error \n");
       break;
@@ -377,6 +378,22 @@ namespace kvssd {
     }
     stats_.num_delete.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_delete] key: %s\n",std::string(key->data(),key->size()).c_str());
+    return ret;
+  }
+
+  kvs_result KVSSD::kv_delete_async(const Slice *key, void (*callback)(void *), void *args) {
+    kvs_key *kvskey = (kvs_key*)malloc(sizeof(kvs_key));
+    kvskey->key = (void *)key->data();
+    kvskey->length = (uint8_t)key->size();
+    const kvs_delete_context del_ctx = { {false}, (void *)callback, (void *)args};
+    kvs_result ret = kvs_delete_tuple_async(cont_handle, kvskey, &del_ctx, on_io_complete);
+
+    if(ret != KVS_SUCCESS) {
+        printf("kv_delete_async error %s\n", kvs_errstr(ret));
+        exit(1);
+    }
+
+    stats_.num_delete.fetch_add(1, std::memory_order_relaxed);
     return ret;
   }
 

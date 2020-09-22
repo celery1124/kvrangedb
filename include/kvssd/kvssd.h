@@ -80,6 +80,7 @@ namespace kvssd {
       kvs_result kv_get_async(const Slice *key, void (*callback)(void *), void *args);
       kvs_result kv_pget(const Slice *key, char*& vbuf, int count, int offset);
       kvs_result kv_delete(const Slice *key);
+      kvs_result kv_delete_async(const Slice *key, void (*callback)(void *), void *args);
 
       kvs_result kv_scan_keys(std::vector<std::string> &keys, int buf_size = 32768);
 
