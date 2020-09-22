@@ -502,28 +502,72 @@ Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   return NewDBIterator(this, options);
 }
 
+typedef struct {
+  std::mutex *m;
+  int fetch_cnt;
+  int fetch_num;
+  Monitor *mon;
+} Compaction_context;
+
+static void on_compact_get_complete (void* args) {
+  Compaction_context *compact_ctx = (Compaction_context *)args;
+  std::mutex *m = compact_ctx->m;
+  {
+    std::unique_lock<std::mutex> lck(*m);
+    if (compact_ctx->fetch_cnt++ == compact_ctx->fetch_num-1)
+      compact_ctx->mon->notify();
+  }
+}
+
+static void on_compact_del_complete (void* args) {
+  Compaction_context *compact_ctx = (Compaction_context *)args;
+  std::mutex *m = compact_ctx->m;
+  {
+    std::unique_lock<std::mutex> lck(*m);
+    if (compact_ctx->fetch_cnt++ == compact_ctx->fetch_num-1)
+      compact_ctx->mon->notify();
+  }
+}
+
 void DBImpl::ManualCompaction() {
+  options_.packDequeueTimeout = 60000; // increase dequeue timeout
   int pack_cnt = 0;
-  int key_cnt = 0;
+  int key_cnt = 0, last_key_cnt = 0;
+  const int batch_size = 256;
   const ReadOptions options;
   IDXIterator *it_ = key_idx_[0]->NewIterator(options);
   it_->SeekToFirst();
   while(it_->Valid()) {
-    Slice lkey = it_->key();
-    Slice pkey = it_->pkey();
 
-    if (pkey.size() == 0 && hot_keys_.find(std::string(lkey.data(), lkey.size())) == hot_keys_.end()) {
-      // pack cold KVs
-      kvssd::Slice cold_key(lkey.data(), lkey.size());
-      char *vbuf;
-      int vlen;
-      int ret = kvd_->kv_get(&cold_key, vbuf, vlen);
-      Slice cold_val(vbuf, vlen);
-      if (ret != 0) {
-        free(vbuf);
-        printf("ManualCompaction, cold keys not found\n");
-        exit(0);
+    // batch compact
+    std::vector<std::string> key_batch;
+    std::vector<kvssd::Slice> fetch_key_list;
+    for (int i = 0; i < batch_size&&it_->Valid(); i++, it_->Next(), key_cnt++) {
+      Slice lkey = it_->key();
+      Slice pkey = it_->pkey();
+      if (pkey.size() == 0 && hot_keys_.find(std::string(lkey.data(), lkey.size())) == hot_keys_.end()) {
+        key_batch.push_back(std::string(lkey.data(), lkey.size()));
+        fetch_key_list.push_back(key_batch[key_batch.size()-1]);
       }
+    }
+    assert(fetch_key_list.size() == key_batch.size());
+
+    Monitor mon;
+    std::mutex m;
+    int fetch_num = key_batch.size();
+    char **vbuf_list = new char*[fetch_num];
+    uint32_t *actual_vlen_list = new uint32_t[fetch_num];
+    Compaction_context *ctx = new Compaction_context {&m, 0, fetch_num, &mon};
+    for (int i = 0; i < fetch_num; i++) {
+      kvssd::Async_get_context *io_ctx = new kvssd::Async_get_context (vbuf_list[i], actual_vlen_list[i], (void *)ctx);
+      kvd_->kv_get_async(&fetch_key_list[i], on_compact_get_complete, (void*) io_ctx);
+    }
+
+    mon.wait();
+    for (int i = 0; i < fetch_num; i++) {
+      Slice lkey (key_batch[i]);
+      kvssd::Slice cold_key(lkey.data(), lkey.size());
+      Slice cold_val (vbuf_list[i], actual_vlen_list[i]);
       int size = get_phyKV_size(lkey, cold_val);
       packKVEntry *item = new packKVEntry(size, lkey, cold_val);
       while (pack_q_.size_approx() > options_.packQueueDepth) {
@@ -532,14 +576,27 @@ void DBImpl::ManualCompaction() {
       }
       pack_q_.enqueue(item);
       pack_cnt++;
-
-      // delete unpacked KV
-      free(vbuf);
       kvd_->kv_delete(&cold_key);
+      free(vbuf_list[i]);
     }
-    it_->Next();
-    key_cnt++;
-    if (key_cnt % 1000000 == 0) printf("[ManualCompaction] total KVs %d, packed KVs %d\n", key_cnt, pack_cnt);
+
+    Monitor mon_d;
+    std::mutex m_d;
+    Compaction_context *ctx_d = new Compaction_context {&m_d, 0, fetch_num, &mon_d};
+    for (int i = 0; i < fetch_num; i++) {
+      kvd_->kv_delete_async(&fetch_key_list[i], on_compact_del_complete, (void*) ctx_d);
+    }
+    mon_d.wait();
+
+    // clean up
+    delete [] vbuf_list;
+    delete [] actual_vlen_list;
+    delete ctx;
+    
+    if (key_cnt - last_key_cnt >= 1000000) {
+      printf("[ManualCompaction] total KVs %d, packed KVs %d\n", key_cnt, pack_cnt);
+      last_key_cnt = key_cnt;
+    }
   }
   printf("[ManualCompaction] total KVs %d, packed KVs %d\n", key_cnt, pack_cnt);
   delete it_;

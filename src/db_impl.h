@@ -78,7 +78,7 @@ public:
   const Comparator* GetComparator() {return options_.comparator;}
 
 private:
-  const Options options_;
+  Options options_;
 
   kvssd::KVSSD *kvd_;
   KVIndex *key_idx_[MAX_INDEX_NUM];
