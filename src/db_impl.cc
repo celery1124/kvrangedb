@@ -130,6 +130,8 @@ DBImpl::~DBImpl() {
   printf("hitCnt = %d\n", hitCnt);
   printf("hitCost = %.3f, missCost = %.3f\n", hitCost, missCost);
   printf("hitNextCost = %.3f, missNextCost = %.3f\n", hitNextCost, missNextCost);
+  printf("bloomHitCnt = %d, bloomFPCnt = %d, bloomMissCnt = %d\n", bloomHitCnt, bloomFPCnt, bloomMissCnt);
+  printf("bloomHitRatio = %.3f\n", (double)(bloomHitCnt-bloomFPCnt)/(bloomHitCnt+bloomMissCnt));
 }
 
 // bulk dequeue, either dequeue max_size or wait for time out
