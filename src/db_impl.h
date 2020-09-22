@@ -94,6 +94,7 @@ private:
   std::mutex *thread_m_;
   bool *shutdown_;
   
+  std::mutex hk_mutex_;
   std::unordered_map<std::string, int> hot_keys_;
   std::string bf_;
 
