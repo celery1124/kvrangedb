@@ -26,11 +26,11 @@ kvssd:
 
 rocksdb:
 	make -C $(HOME)/src/rocksdb/ shared_lib -j8
-	cp $(HOME)/src/rocksdb/librocksdb* $(HOME)/libs
+	cp $(HOME)/src/rocksdb/librocksdb* $(HOME)/libs -P
 
 leveldb:
 	make -C $(HOME)/src/leveldb/
-	cp $(HOME)/src/leveldb/out-shared/libleveldb.so* $(HOME)/libs
+	cp $(HOME)/src/leveldb/out-shared/libleveldb.so* $(HOME)/libs -P
 
 kvrangedb:
 	$(CC) -shared -o $(HOME)/libs/$(TARGET) $(SRCS) $(INCLUDES) $(LIBS) $(CXXFLAG)
