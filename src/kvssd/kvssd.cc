@@ -306,11 +306,12 @@ namespace kvssd {
     vlen = kvsvalue.actual_value_size;
     if (init_size < vlen) {
       // implement own aligned_realloc
-      char *realloc_vbuf = (char *) malloc(vlen + 4 - (vlen%4));
+      int realloc_buf_size = (vlen + 4 - (vlen%4)) > (2<<20) ? (2<<20) : (vlen + 4 - (vlen%4));
+      char *realloc_vbuf = (char *) malloc(realloc_buf_size);
       memcpy(realloc_vbuf, vbuf, init_size);
       free(vbuf); vbuf = realloc_vbuf;
       kvsvalue.value = vbuf;
-      kvsvalue.length = vlen + 4 - (vlen%4);
+      kvsvalue.length = realloc_buf_size;
       kvsvalue.offset = init_size; // skip the first IO buffer (not support, actually read whole value)
       ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
 
