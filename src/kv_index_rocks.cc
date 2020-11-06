@@ -158,12 +158,13 @@ KVIndexRocks::KVIndexRocks(const Options& db_options, kvssd::KVSSD* kvd, std::st
   options.max_open_files = 1000;
   options.compression = rocksdb::kNoCompression;
   options.paranoid_checks = false;
-  options.write_buffer_size = 16 << 20;
-  options.target_file_size_base = 8 * 1048576;
+  options.write_buffer_size = 20 << 20;
+  options.target_file_size_base = 20 * 1048576;
   options.max_bytes_for_level_base = 10 * 1048576;
 
   rocksdb::BlockBasedTableOptions table_options;
   table_options.block_size = 16384;
+  //table_options.block_cache = rocksdb::NewLRUCache(128 * 1024 * 1024LL); 
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
   // apply db options

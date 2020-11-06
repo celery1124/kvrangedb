@@ -100,6 +100,22 @@ struct Options {
   // Default: false
   bool manualCompaction;
 
+  // Background compaction
+  // Default: false
+  bool bgCompaction;
+
+  // Background compaction interval (sec)
+  // Default: 10
+  bool bgCompactionInterval;
+
+  // Background compaction scan length
+  // Default: 100000
+  bool bgCompactionScanLength;
+
+  // Hot key training count
+  // Default: 1000000
+  int hotKeyTrainingNum;
+
   // Bits per key for bloom filter
   // Default: 8
   int filterBitsPerKey;
@@ -120,6 +136,10 @@ struct Options {
               packQueueDepth(1024),
               packThreadsNum(8),
               manualCompaction(false),
+              bgCompaction(false),
+              bgCompactionInterval(10),
+              bgCompactionScanLength(100000),
+              hotKeyTrainingNum(1000000),
               filterBitsPerKey(8) {
     // Load from environment variable
     char *env_p;

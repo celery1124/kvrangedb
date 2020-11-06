@@ -21,6 +21,7 @@
 #include "kvrangedb/db.h"
 
 int obj_len;
+int key_len;
 
 std::map<std::string, std::string> groundTruth;
 std::mutex m;
@@ -108,16 +109,17 @@ void DoWrite(kvrangedb::DB *db, int start_num, int num, bool seq, bool batchIDX)
     wropts.batchIDXWrite = batchIDX;
     for (int i = 0; i < num; i++) {
         const int k = seq ? i : (rand.Next() % num);
-        char key[100];
-        snprintf(key, sizeof(key), "%016d", k+start_num);
+        char key_buf[100]={0};
+        snprintf(key_buf, sizeof(key_buf), "%016d", k+start_num);
         char *value = gen.Generate(obj_len);
         kvrangedb::Slice val(value, obj_len);
+        kvrangedb::Slice key(key_buf, key_len);
 
         db->Put(wropts, key, val);
-        //printf("[insert] key %s, val %s\n", key, std::string(value, 8).c_str());
+        //printf("[insert] key %s, val %s\n", key_buf, std::string(value, 8).c_str());
         {
           std::unique_lock<std::mutex> lck(m);
-          groundTruth[std::string(key, 16)] = std::string(value, 8).c_str();
+          groundTruth[std::string(key_buf, key_len)] = std::string(value, 8).c_str();
         }
     }
 }
@@ -128,11 +130,11 @@ void DoDelete(kvrangedb::DB *db, int num, bool seq) {
     kvrangedb::WriteOptions wropts;
     for (int i = 0; i < num; i++) {
         const int k = seq ? i : (rand.Next() % num);
-        char key[100];
-        snprintf(key, sizeof(key), "%016d", k);
+        char key_buf[100]={0};
+        snprintf(key_buf, sizeof(key_buf), "%016d", k);
 
-        db->Delete(wropts, key);
-        //printf("[delete] key %s\n", key);
+        db->Delete(wropts, key_buf);
+        //printf("[delete] key %s\n", key_buf);
     }
 }
 
@@ -142,15 +144,15 @@ void RandomRead(kvrangedb::DB *db, int num) {
   if (obj_len >= 4096) rdopts.hint_packed = 1;
   else rdopts.hint_packed = 2;
   for (int i = 0; i < 100; i++) {
-      char key[100];
+      char key_buf[100]={0};
       const int k = (rand.Next() % num);
-      snprintf(key, sizeof(key), "%016d", k);
+      snprintf(key_buf, sizeof(key_buf), "%016d", k);
 
       std::string val;
-      db->Get(rdopts, key, &val);
-      printf("[get] key %s, val %s, val_len %d\n", key, val.substr(0,8).c_str(), val.size());
+      db->Get(rdopts, key_buf, &val);
+      printf("[get] key %s, val %s, val_len %d\n", key_buf, val.substr(0,8).c_str(), val.size());
  
-      printf("[truth] key %s, val %s, val_len %d\n", key, groundTruth[std::string(key, 16)].c_str(), val.size());
+      printf("[truth] key %s, val %s, val_len %d\n", key_buf, groundTruth[std::string(key_buf, key_len)].c_str(), val.size());
   }
 }
 
@@ -161,18 +163,18 @@ void RandomSeek(kvrangedb::DB *db, int num, int seed) {
   Random rand(seed);
   for (int i = 0; i < seek_num; i++) {
     kvrangedb::Iterator* iter = db->NewIterator(rdopts);
-    char key[100];
+    char key_buf[100]={0};
     const int k = (rand.Next() % num);
-    snprintf(key, sizeof(key), "%016d", k);
+    snprintf(key_buf, sizeof(key_buf), "%016d", k);
     
-    iter->Seek(key);
-    if (iter->Valid() && iter->key() == key) found++;
+    iter->Seek(key_buf);
+    if (iter->Valid() && iter->key() == key_buf) found++;
     kvrangedb::Slice val = iter->value();
     printf("Seek %d, Get key %s, value %s\n", k, iter->key().ToString().c_str(), std::string(val.data(), 8).c_str());
 
     delete iter;
     
-    auto itlow=groundTruth.lower_bound (std::string(key, 16));
+    auto itlow=groundTruth.lower_bound (std::string(key_buf, key_len));
     printf("Seek %d, Truth key %s, value %s\n", k, itlow->first.c_str(), itlow->second.c_str());
   }
   printf("%d out of %d keys found\n", found, seek_num);
@@ -186,14 +188,14 @@ void DoScan(kvrangedb::DB *db, int num) {
   kvrangedb::Iterator* iter = db->NewIterator(rdopts);
   int scan_len = 10;
   
-  char key[100] = {0};
+  char key_buf[100]={0};
   const int k = (rand.Next() % num);
-  snprintf(key, sizeof(key), "%016d", k);
+  snprintf(key_buf, sizeof(key_buf), "%016d", k);
   //iter->SeekToFirst();
-  iter->Seek(key);
+  iter->Seek(key_buf);
   int i = 0;
-  printf("Scan start key %s\n", key);
-  auto itlow=groundTruth.lower_bound (std::string(key, 16));
+  printf("Scan start key %s\n", std::string(key_buf, key_len).c_str());
+  auto itlow=groundTruth.lower_bound (std::string(key_buf, key_len));
   while(iter->Valid() && scan_len > 0) {
     kvrangedb::Slice val = iter->value();
     printf("[Scan] #%d, Get key %s, value %s\n", ++i, iter->key().ToString().c_str(), std::string(val.data(), 8).c_str());
@@ -216,19 +218,23 @@ public:
 };
 
 int main () {
-  int thread_cnt = 8;
-  int num = 30000;
+  int thread_cnt = 1;
+  int num = 1000000;
   obj_len = 1000;
+  key_len = 16;
 
   CustomComparator cmp;
   kvrangedb::Options options;
   options.comparator = &cmp;
   options.cleanIndex = true;
   options.indexNum = 1;
+  options.indexType = kvrangedb::ROCKS;
+  options.packThres = 10;
+  options.manualCompaction = true;
 
   kvrangedb::DB *db = NULL;
   //kvrangedb::DB::Open(options, "/dev/kvemul", &db);
-  kvrangedb::DB::Open(options, "/dev/nvme2n1", &db);
+  kvrangedb::DB::Open(options, "/dev/nvme1n1", &db);
 
   auto wcts = std::chrono::system_clock::now();
   std::thread *th_write[16];
@@ -248,16 +254,16 @@ int main () {
 
   RandomRead(db, num);
 
-  std::thread *th_seek[16];
-  RandomSeek(db, num*thread_cnt, 2019);
-  // for (int i = 0; i< thread_cnt; i++) {
-  //   th_seek[i] = new std::thread(RandomSeek, db, num, i);
-  // }
-  // for (int i = 0; i< thread_cnt; i++) {
-  //   th_seek[i]->join();
-  // }
+  // std::thread *th_seek[16];
+  // RandomSeek(db, num*thread_cnt, 2019);
+  // // for (int i = 0; i< thread_cnt; i++) {
+  // //   th_seek[i] = new std::thread(RandomSeek, db, num, i);
+  // // }
+  // // for (int i = 0; i< thread_cnt; i++) {
+  // //   th_seek[i]->join();
+  // // }
 
-  DoScan(db, num*thread_cnt);
+  // DoScan(db, num*thread_cnt);
   for (int i = 0; i< thread_cnt; i++) {
     //delete th_seek[i];
     delete th_write[i];

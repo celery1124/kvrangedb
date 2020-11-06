@@ -96,6 +96,7 @@ private:
   
   std::mutex hk_mutex_;
   std::unordered_map<std::string, int> hot_keys_;
+  std::atomic<int> hot_keys_training_cnt_;
   std::string bf_;
 
   void processQ(int id);
@@ -173,6 +174,7 @@ private:
   }
 
   void ManualCompaction();
+  void BGCompaction();
   void BuildFilter();
 
 public:

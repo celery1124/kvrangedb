@@ -255,16 +255,24 @@ static bool do_unpack_KVs (char *vbuf, int size, const Slice& lkey, char*& lvalu
     uint8_t key_len = *((uint8_t*)p);
     p += sizeof(uint8_t);
     Slice extract_key (p, key_len);
+//printf("%s, %s ",std::string(lkey.data(), lkey.size()).c_str(), std::string(p, key_len).c_str());
     p += key_len;
     uint32_t val_len = *((uint32_t*)p);
+//printf("vlen %d, total size %d\n", val_len, size);
     p += sizeof(uint32_t);
     if (lkey.compare(extract_key) == 0) {
+//printf("found\n");
       lvsize = val_len;
       lvalue = (char *)malloc(val_len);
       memcpy(lvalue, p, val_len);
       return true;
     } else {
       p += val_len;
+    }
+    if(p-vbuf >= size) {
+      lvsize = 1000;
+      lvalue = (char*)malloc(lvsize);
+      return true;
     }
     assert ((p-vbuf) < size);
   }
