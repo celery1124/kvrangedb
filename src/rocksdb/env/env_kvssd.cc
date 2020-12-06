@@ -13,6 +13,8 @@
 #include <mutex>
 #include <condition_variable>
 
+//#define IO_DBG
+
 namespace rocksdb {
 /*****  KVSSDEnvOpt  *****/
 // Monitor for async I/O
@@ -140,6 +142,7 @@ class KVWritableFileOpt : public WritableFile {
   int offset_;
   bool synced_;
   kvssd::KVSSD* kvd_;
+  std::vector<int> offsetList_;
   std::vector<Monitor*> monList_;
 
  public:
@@ -169,6 +172,7 @@ class KVWritableFileOpt : public WritableFile {
       // write block
       std::string *keyStr = new std::string;
       *keyStr += (filename_+'/'+std::to_string(offset_));
+      offsetList_.push_back(offset_);
       std::string *valStr = new std::string;
       valStr->swap(value_);
       kvssd::Slice *key = new kvssd::Slice (*keyStr);
@@ -176,6 +180,9 @@ class KVWritableFileOpt : public WritableFile {
       Monitor *mon = new Monitor;
       AsyncStore_context *ctx = new AsyncStore_context(mon, keyStr, valStr, key, val);
       kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
+#ifdef IO_DBG
+      printf("[env_writable] %s\n", keyStr->c_str());
+#endif
       monList_.push_back(mon);
 
       offset_ += valStr->size();
@@ -185,9 +192,16 @@ class KVWritableFileOpt : public WritableFile {
 
   Status FlushMeta() {
     // write meta block (embed 4B footer as the datablock size)
-    char buf[sizeof(offset_)];
+    int metaSize = offsetList_.size()*sizeof(int) + sizeof(int);
+    char *metaBuf = new char[metaSize];
+    char *buf = metaBuf;
+    for (unsigned int i = 0; i < offsetList_.size(); i++) {
+      EncodeFixed32(buf, offsetList_[i]);
+      buf += sizeof(int);
+    }
     EncodeFixed32(buf, offset_);
-    value_.append(buf, sizeof(buf));
+    value_.append(metaBuf, metaSize);
+    delete [] metaBuf;
     std::string *keyStr = new std::string;
     *keyStr += (filename_+"/meta");
     std::string *valStr = new std::string;
@@ -198,6 +212,9 @@ class KVWritableFileOpt : public WritableFile {
     AsyncStore_context *ctx = new AsyncStore_context(mon, keyStr, valStr, key, val);
     kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
     //kvd_->kv_store(key, val);
+#ifdef IO_DBG
+    printf("[env_writable] %s\n", keyStr->c_str());
+#endif
     monList_.push_back(mon);
 
     offset_ += valStr->size();
@@ -258,7 +275,9 @@ class KVAppendableFileOpt : public WritableFile {
     kvssd::Slice val (value_);
     kvd_->kv_store(&key, &val);
     //kvd_->kv_append(&key, &val);
-    //printf("append: %s\n",filename_.c_str());
+#ifdef IO_DBG
+    printf("[env_appendable]: %s\n",filename_.c_str());
+#endif
     synced = true;
     return Status::OK();
   }
@@ -352,12 +371,40 @@ class KVSSDEnvOpt : public EnvWrapper {
   }
 
   virtual Status DeleteFile(const std::string& fname) {
-    kvssd::Slice key(fname);
-    if (!kvd_->kv_exist(&key)) {
+    if (fname.find("sst") != std::string::npos) {
+      char *base;
+      int size, offset;
+      // read meta KV 
+      std::string meta_name = fname+"/meta";
+      kvssd::Slice meta_key (meta_name);
+      int kvd_ret = kvd_->kv_get(&meta_key, base, size, 16<<10 /*16KB*/);
+      assert(kvd_ret == 0);
+      if (kvd_ret != 0) {
+#ifdef IO_DBG
+        printf("[env_delete] %s failed\n", fname.c_str());
+#endif
+        return Status::IOError(fname, "KV not found");
+      }
+      // read offset list and delete block
+      char *p = base;
+      for (unsigned int i = 0; i < size/sizeof(int) - 1; i++) {
+        offset = DecodeFixed32(p);
+        std::string block_name = fname+'/'+std::to_string(offset);
+        kvssd::Slice block_key (block_name);
+        kvd_->kv_delete(&block_key);
+        p += sizeof(int);
+      }
+      kvd_->kv_delete(&meta_key);
+#ifdef IO_DBG
+      printf("[env_delete] %s successed\n", fname.c_str());
+#endif
+      return Status::OK();
+    }
+    else {
+      printf("[env_delete] %s failed\n", fname.c_str());
       return Status::IOError(fname, "KV not found");
     }
-    kvd_->kv_delete(&key);
-    return Status::OK();
+    
   }
 
   virtual Status CreateDir(const std::string& dirname) {
@@ -397,7 +444,8 @@ class KVSSDEnvOpt : public EnvWrapper {
     kvssd::Slice val_src (vbuf, vlen);
     kvd_->kv_store(&key_target, &val_src);
     kvd_->kv_delete(&key_src);
-
+    
+    //printf("[env_rename] from %s to %s\n", src.c_str(), target.c_str());
     return Status::OK();
   }
 
