@@ -164,6 +164,9 @@ private:
   std::string value_;
   bool valid_;
 
+  // upper key hint
+  Slice upper_key_;
+
   // for value prefetch
   std::string *key_queue_;
   std::string *pkey_queue_;
@@ -187,6 +190,10 @@ DBIterator::DBIterator(DBImpl *db, const ReadOptions &options)
 : db_(db), options_(options), kvd_(db->GetKVSSD()), valid_(false),
   prefetch_depth_(options.scan_length), queue_cur_(0), 
   isPacked_(false), packedIdx_(0) {
+  
+  if (options_.upper_key != NULL) {
+    upper_key_ = *(options_.upper_key);
+  }
   if (db_->options_.prefetchEnabled) {
     int prefetch_depth = db_->options_.prefetchDepth;
     key_queue_ = new std::string[prefetch_depth];
@@ -219,8 +226,8 @@ DBIterator::~DBIterator() {
     delete [] key_queue_;
     delete [] pkey_queue_;
     for (int i = 0 ; i < db_->options_.prefetchDepth; i++) {
-      if (val_queue_[i].size() != 0) {
-        if (val_queue_[i].size() > 0) free((void *)val_queue_[i].data());
+      if (val_queue_[i].size()) {
+        free((void *)val_queue_[i].data());
       }
     }
     delete [] val_queue_;
@@ -371,30 +378,58 @@ void DBIterator::Seek(const Slice& target) {
   // none phase
   it_->Seek(target); 
   if (db_->options_.prefetchEnabled) {
-    valid_ = valid_queue_[0] = it_->Valid();
-    if (it_->Valid()) {
+    if (upper_key_.size() > 0) { // upper key specified
+      valid_ = valid_queue_[0] = (it_->Valid() && db_->options_.comparator->Compare(it_->key(), upper_key_) < 0);
+    }
+    else
+      valid_ = valid_queue_[0] = it_->Valid();
+    if (valid_) {
       key_queue_[0] = it_->key().ToString();
       pkey_queue_[0] = it_->value().ToString();
     }
     // implicit next for prefetch
     assert(queue_cur_ == 0);
-    for (int i = 1; i < prefetch_depth_; i++) {
-      if (it_->Valid()) {
-        it_->Next();
-        if(it_->Valid()) {
-          key_queue_[i] = (it_->key()).ToString();
-          pkey_queue_[i] = (it_->value()).ToString();
-          valid_queue_[i] = true;
-        }
-        else {
-          valid_queue_[i] = false;
-          break;
+    if (upper_key_.size() > 0) { // upper key specified
+      for (int i = 1; i < prefetch_depth_; i++) {
+        if (it_->Valid() && db_->options_.comparator->Compare(it_->key(), upper_key_) < 0) {
+          it_->Next();
+          if(it_->Valid()) {
+            key_queue_[i] = (it_->key()).ToString();
+            pkey_queue_[i] = (it_->value()).ToString();
+            valid_queue_[i] = true;
+          }
+          else {
+            valid_queue_[i] = false;
+            break;
+          }
         }
       }
     }
+    else { // upper key not specified 
+      for (int i = 1; i < prefetch_depth_; i++) {
+        if (it_->Valid()) {
+          it_->Next();
+          if(it_->Valid()) {
+            key_queue_[i] = (it_->key()).ToString();
+            pkey_queue_[i] = (it_->value()).ToString();
+            valid_queue_[i] = true;
+          }
+          else {
+            valid_queue_[i] = false;
+            break;
+          }
+        }
+      }
+    }
+    
   }
   else {
-    valid_ = it_->Valid();
+    if (upper_key_.size() > 0) { // upper key specified
+      valid_ = (it_->Valid() && db_->options_.comparator->Compare(it_->key(), upper_key_) < 0);
+    }
+    else {
+      valid_ = it_->Valid();
+    }
   }
   
   std::chrono::duration<double, std::micro> missduration = (std::chrono::system_clock::now() - wcts);
@@ -428,7 +463,7 @@ void DBIterator::Next() {
       queue_cur_ = 0; //reset cursor
       // release allocated memory vbuf
       for (int i = 0; i < prefetch_depth_; i++) {
-        free ((void *)val_queue_[i].data());
+        if (val_queue_[i].size()) free ((void *)val_queue_[i].data());
         val_queue_[i].clear();
       }
       // calculate prefetch depth 
@@ -436,17 +471,36 @@ void DBIterator::Next() {
         prefetch_depth_ = prefetch_depth_ == 0 ? 1 : prefetch_depth_ << 1;
       }
 
-      for (int i = 0; i < prefetch_depth_; i++) {
-        it_->Next();
-        valid_ = it_->Valid();
-        if(valid_) {
-          key_queue_[i] = (it_->key()).ToString();
-          pkey_queue_[i] = (it_->value()).ToString();
-          valid_queue_[i] = true;
+      if (upper_key_.size() > 0) { // upper key specified
+        for (int i = 1; i < prefetch_depth_; i++) {
+          if (it_->Valid() && db_->options_.comparator->Compare(it_->key(), upper_key_) < 0) {
+            it_->Next();
+            if(it_->Valid()) {
+              key_queue_[i] = (it_->key()).ToString();
+              pkey_queue_[i] = (it_->value()).ToString();
+              valid_queue_[i] = true;
+            }
+            else {
+              valid_queue_[i] = false;
+              break;
+            }
+          }
         }
-        else {
-          valid_queue_[i] = false;
-          break;
+      }
+      else { // upper key not specified 
+
+        for (int i = 0; i < prefetch_depth_; i++) {
+          it_->Next();
+          valid_ = it_->Valid();
+          if(valid_) {
+            key_queue_[i] = (it_->key()).ToString();
+            pkey_queue_[i] = (it_->value()).ToString();
+            valid_queue_[i] = true;
+          }
+          else {
+            valid_queue_[i] = false;
+            break;
+          }
         }
       }
     }
@@ -487,31 +541,15 @@ Slice DBIterator::value() {
       std::vector<Slice> lkey_list;
       std::vector<Slice> val_list;
 
-      Slice upper_key;
-      if (options_.upper_key != NULL) {
-        upper_key = *(options_.upper_key);
-      }
       for (int i = 0; i < prefetch_depth_; i++) {
         if(valid_queue_[i]) {
-          if (upper_key.size() > 0 && db_->options_.comparator->Compare(key_queue_[i], upper_key) < 0) {
-            if (pkey_queue_[i].size() > 0) {
-              key_list.push_back(Slice(pkey_queue_[i]));
-              lkey_list.push_back(key_queue_[i]);
-            } else {
-              key_list.push_back(Slice(key_queue_[i]));
-              lkey_list.push_back(Slice());
-            }
+          if (pkey_queue_[i].size() > 0) {
+            key_list.push_back(Slice(pkey_queue_[i]));
+            lkey_list.push_back(key_queue_[i]);
+          } else {
+            key_list.push_back(Slice(key_queue_[i]));
+            lkey_list.push_back(Slice());
           }
-          else if (upper_key.size() == 0) {
-            if (pkey_queue_[i].size() > 0) {
-              key_list.push_back(Slice(pkey_queue_[i]));
-              lkey_list.push_back(key_queue_[i]);
-            } else {
-              key_list.push_back(Slice(key_queue_[i]));
-              lkey_list.push_back(Slice());
-            }
-          }
-          else {} // do nothing
         }
         else break;
       }
