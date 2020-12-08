@@ -63,7 +63,7 @@ public:
 
     printf("[%s] ", buffer);
     for(int i = 0; i < TickersNameMap.size(); i++) {
-      printf("\t%s, %lu", TickersNameMap[i].second.c_str());
+      printf("\t%s, %lu", TickersNameMap[i].second.c_str(), getTickCount(i));
     }
     printf("\n");
   }
