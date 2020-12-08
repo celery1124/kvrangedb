@@ -231,11 +231,14 @@ void DBImpl::processQ(int id) {
     {
       std::unique_lock<std::mutex> lck (thread_m_[id]);
       if (shutdown_[id] == true && (!ready_to_shutdown)) {
-          // clean up
-          sleep(1); // wait all enqueue done
           ready_to_shutdown = true;
       }
     }
+
+    if (ready_to_shutdown) {
+      sleep(1); // wait all enqueue done
+    }
+    
     // dequeue
     std::vector<packKVEntry*> kvs;
     int pack_size = dequeue_bulk_timed(pack_q_, kvs, options_.maxPackNum, options_.packSize, options_.packDequeueTimeout);
@@ -323,6 +326,8 @@ Status DBImpl::Put(const WriteOptions& options,
   else {
     kvssd::Slice put_key(key.data(), key.size());
     kvssd::Slice put_val(value.data(), value.size());
+
+    // sync write 1-data, 2-index
     // Monitor mon;
     // kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
     // // index write
@@ -444,7 +449,7 @@ Status DBImpl::Get(const ReadOptions& options,
       }
     }
   }                     
-  else if (options.hint_packed == 1) { // large value                     
+  else if (options.hint_packed == 1) { // large value  
     kvssd::Slice get_key(key.data(), key.size());
     char *vbuf;
     int vlen;
@@ -457,6 +462,7 @@ Status DBImpl::Get(const ReadOptions& options,
     else {
       free(vbuf);
       possible_unpacked = false;
+      return Status().NotFound(Slice());
     }
   }
 
