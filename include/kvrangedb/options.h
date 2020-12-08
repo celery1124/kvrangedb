@@ -223,12 +223,11 @@ struct Options {
         manualCompaction = false;
     }
   };
-
-  std::shared_ptr<Statistics> CreateStatistics() {
+  static std::shared_ptr<Statistics> CreateDBStatistics() {
+    printf("KVRangeDB Statistics Created\n");
     return std::make_shared<Statistics>(120);
   } 
 };
-
 
 // Options that control read operations
 struct ReadOptions {

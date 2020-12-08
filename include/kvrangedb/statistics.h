@@ -33,17 +33,26 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {REQ_PUT, "req.put"},
     {REQ_GET, "req.get"},
     {REQ_DEL, "req.delete"},
+    {REQ_SEEK, "req.seek"},
+    {REQ_NEXT, "req.next"},
 };
 
 class Statistics {
 public:
   std::atomic_uint_fast64_t tickers_[TICKER_ENUM_MAX] = {{0}};
   std::thread *report_;
+  pthread_t  report_tt_;
 public:
   Statistics(int interval) {
     report_ = new std::thread(&Statistics::ReportStats, this, interval);
+    report_tt_ = report_->native_handle();
+    report_->detach();
   }
-  ~Statistics() {delete report_;}
+  ~Statistics() {
+    pthread_cancel(report_tt_);
+     reportStats();
+    delete report_;
+  }
 
   void recordTick(uint32_t tickType, uint64_t count = 1) {
     if (tickType < TICKER_ENUM_MAX)
@@ -65,7 +74,8 @@ public:
 
     printf("[%s] ", buffer);
     for(int i = 0; i < TickersNameMap.size(); i++) {
-      printf("\t%s, %lu", TickersNameMap[i].second.c_str(), getTickCount(i));
+      printf("\t%s: %lu", TickersNameMap[i].second.c_str(), getTickCount(i));
+      if ((i+1)%6 == 0) printf("\n\t\t\t");
     }
     printf("\n");
   }
