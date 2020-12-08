@@ -311,6 +311,7 @@ inline int get_phyKV_size(const Slice& key, const Slice& value) {
 Status DBImpl::Put(const WriteOptions& options,
                      const Slice& key,
                      const Slice& value) {
+  RecordTick(options_.statistics.get(), REQ_PUT);
 
   // smaller values
   if (value.size() < options_.packThres) {
@@ -345,6 +346,8 @@ Status DBImpl::Put(const WriteOptions& options,
 }
 
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
+  RecordTick(options_.statistics.get(), REQ_DEL);
+
   kvssd::Slice del_key(key.data(), key.size());
 	kvd_->kv_delete(&del_key);
   int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
@@ -408,6 +411,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
 Status DBImpl::Get(const ReadOptions& options,
                      const Slice& key,
                      std::string* value) {
+  RecordTick(options_.statistics.get(), REQ_GET);
+
   bool possible_packed = true;
   bool possible_unpacked = true;
   if (options_.manualCompaction || options_.bgCompaction && hot_keys_training_cnt_.load() < options_.hotKeyTrainingNum) { // capture hot query
