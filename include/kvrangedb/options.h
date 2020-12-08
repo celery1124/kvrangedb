@@ -10,7 +10,11 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <memory>
+#include <string>
+
 #include "kvrangedb/comparator.h"
+#include "kvrangedb/statistics.h"
 
 namespace kvrangedb {
 
@@ -120,6 +124,10 @@ struct Options {
   // Default: 8
   int filterBitsPerKey;
 
+  // Statistic (create to record count)
+  // Default: NULL
+  std::shared_ptr<Statistics> statistics;
+
   Options() : comparator(BytewiseComparator()),
               indexType(LSM),
               cleanIndex(false),
@@ -140,7 +148,8 @@ struct Options {
               bgCompactionInterval(10),
               bgCompactionScanLength(100000),
               hotKeyTrainingNum(1000000),
-              filterBitsPerKey(8) {
+              filterBitsPerKey(8),
+              statistics(nullptr) {
     // Load from environment variable
     char *env_p;
     if(env_p = std::getenv("INDEX_TYPE")) {
@@ -205,6 +214,10 @@ struct Options {
         manualCompaction = false;
     }
   };
+
+  std::shared_ptr<Statistics> CreateStatistics() {
+    return std::make_shared<Statistics>();
+  } 
 };
 
 
