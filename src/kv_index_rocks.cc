@@ -164,7 +164,7 @@ KVIndexRocks::KVIndexRocks(const Options& db_options, kvssd::KVSSD* kvd, std::st
 
   rocksdb::BlockBasedTableOptions table_options;
   table_options.block_size = 16384;
-  //table_options.block_cache = rocksdb::NewLRUCache(128 * 1024 * 1024LL); 
+  table_options.block_cache = rocksdb::NewLRUCache(db_options.indexCacheSize * 1024 * 1024LL); 
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
   // apply db options
