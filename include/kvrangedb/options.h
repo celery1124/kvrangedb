@@ -216,7 +216,7 @@ struct Options {
   };
 
   std::shared_ptr<Statistics> CreateStatistics() {
-    return std::make_shared<Statistics>();
+    return std::make_shared<Statistics>(120);
   } 
 };
 
