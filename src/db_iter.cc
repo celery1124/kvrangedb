@@ -108,7 +108,11 @@ public:
     current_->Next();
     FindSmallest();
   };
-  void Prev() { /* NOT IMPLEMENT */ }
+  void Prev() { /* NOT FULLY IMPLEMENT, ONLY SUPPORT SINGLE INDEX */ 
+    assert(Valid());
+
+    current_->Prev();
+  }
   Slice key() const {
     assert(Valid());
     return current_->key();
@@ -153,7 +157,7 @@ public:
   void SeekToLast() { /* NOT IMPLEMENT */ }
   void Seek(const Slice& target);
   void Next();
-  void Prev() { /* NOT IMPLEMENT */ }
+  void Prev();
   Slice key() const;
   Slice value();
 private:
@@ -434,6 +438,20 @@ void DBIterator::Seek(const Slice& target) {
   
   std::chrono::duration<double, std::micro> missduration = (std::chrono::system_clock::now() - wcts);
   missCost += missduration.count();
+}
+
+void DBIterator::Prev() { /* NOT FULLY IMPLEMENT, Suppose ONLY CALL BEFORE next */ 
+  assert(valid_);
+  std::string curr_key = it_->key().ToString();
+
+  do {
+    it_->Prev();
+  } while (it_->Valid() && db_->options_.comparator->Compare(it_->key(), curr_key) >= 0);
+  valid_ = it_->Valid();
+  if (valid_ && db_->options_.prefetchEnabled) {
+    key_queue_[0] = it_->key().ToString();
+    pkey_queue_[0] = it_->value().ToString();
+  }
 }
 
 void DBIterator::Next() {
