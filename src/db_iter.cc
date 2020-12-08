@@ -348,6 +348,7 @@ static bool isHelperKV(char *vbuf, int vlen) {
 }
 
 void DBIterator::Seek(const Slice& target) { 
+  RecordTick(db_->options_.statistics.get(), REQ_SEEK);
   auto wcts = std::chrono::system_clock::now();
   // training helper record
   if (db_->options_.helperHint == 1) {
@@ -455,6 +456,7 @@ void DBIterator::Prev() { /* NOT FULLY IMPLEMENT, Suppose ONLY CALL BEFORE next 
 }
 
 void DBIterator::Next() {
+  RecordTick(db_->options_.statistics.get(), REQ_NEXT);
   auto wcts = std::chrono::system_clock::now();
   assert(valid_);
   if (isPacked_) {

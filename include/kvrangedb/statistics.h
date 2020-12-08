@@ -23,6 +23,8 @@ enum Tickers : uint32_t {
   REQ_PUT = 0,
   REQ_GET,
   REQ_DEL,
+  REQ_SEEK,
+  REQ_NEXT,
   // I/O
   TICKER_ENUM_MAX
 };
