@@ -231,11 +231,14 @@ void DBImpl::processQ(int id) {
     {
       std::unique_lock<std::mutex> lck (thread_m_[id]);
       if (shutdown_[id] == true && (!ready_to_shutdown)) {
-          // clean up
-          sleep(1); // wait all enqueue done
           ready_to_shutdown = true;
       }
     }
+
+    if (ready_to_shutdown) {
+      sleep(1); // wait all enqueue done
+    }
+    
     // dequeue
     std::vector<packKVEntry*> kvs;
     int pack_size = dequeue_bulk_timed(pack_q_, kvs, options_.maxPackNum, options_.packSize, options_.packDequeueTimeout);
@@ -308,6 +311,7 @@ inline int get_phyKV_size(const Slice& key, const Slice& value) {
 Status DBImpl::Put(const WriteOptions& options,
                      const Slice& key,
                      const Slice& value) {
+  RecordTick(options_.statistics.get(), REQ_PUT);
 
   // smaller values
   if (value.size() < options_.packThres) {
@@ -323,6 +327,8 @@ Status DBImpl::Put(const WriteOptions& options,
   else {
     kvssd::Slice put_key(key.data(), key.size());
     kvssd::Slice put_val(value.data(), value.size());
+
+    // sync write 1-data, 2-index
     // Monitor mon;
     // kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
     // // index write
@@ -340,6 +346,8 @@ Status DBImpl::Put(const WriteOptions& options,
 }
 
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
+  RecordTick(options_.statistics.get(), REQ_DEL);
+
   kvssd::Slice del_key(key.data(), key.size());
 	kvd_->kv_delete(&del_key);
   int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
@@ -403,6 +411,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
 Status DBImpl::Get(const ReadOptions& options,
                      const Slice& key,
                      std::string* value) {
+  RecordTick(options_.statistics.get(), REQ_GET);
+
   bool possible_packed = true;
   bool possible_unpacked = true;
   if (options_.manualCompaction || options_.bgCompaction && hot_keys_training_cnt_.load() < options_.hotKeyTrainingNum) { // capture hot query
@@ -444,7 +454,7 @@ Status DBImpl::Get(const ReadOptions& options,
       }
     }
   }                     
-  else if (options.hint_packed == 1) { // large value                     
+  else if (options.hint_packed == 1) { // large value  
     kvssd::Slice get_key(key.data(), key.size());
     char *vbuf;
     int vlen;
@@ -457,6 +467,7 @@ Status DBImpl::Get(const ReadOptions& options,
     else {
       free(vbuf);
       possible_unpacked = false;
+      return Status().NotFound(Slice());
     }
   }
 

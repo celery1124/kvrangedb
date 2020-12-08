@@ -59,6 +59,10 @@ struct Options {
   // Number of index partitions, MAX 8 (currently only support LSM)
   // Default: 1 (no partition)
   int indexNum;
+
+  // Index cache size in MB (currently only support LSM)
+  // Default: 128MB
+  int indexCacheSize;
   
   // Whether enable value prefetch for iterators
   // Default: false
@@ -132,6 +136,7 @@ struct Options {
               indexType(LSM),
               cleanIndex(false),
               indexNum(1),
+              indexCacheSize(128),
               prefetchEnabled(false),
               prefetchDepth(128),
               rangefilterEnabled(false),
@@ -171,6 +176,10 @@ struct Options {
 
     if(env_p = std::getenv("INDEX_NUM")) {
       indexNum = atoi(env_p);
+    }
+
+    if(env_p = std::getenv("INDEX_CACHE_SIZE")) {
+      indexCacheSize = atoi(env_p);
     }
 
     if(env_p = std::getenv("PREFETCH_ENA")) {
