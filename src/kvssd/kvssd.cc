@@ -98,7 +98,9 @@ namespace kvssd {
         printf("STORE tuple failed with err %s, key %s\n", kvs_errstr(ret), std::string(key->data(), key->size()).c_str());
         exit(1);
     }
-    stats_.num_store.fetch_add(1, std::memory_order_relaxed);
+
+    RecordTick(statistics, IO_PUT);
+    // stats_.num_store.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_store] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
     return ret;
   }
@@ -122,7 +124,9 @@ namespace kvssd {
         printf("kv_store_async error %s\n", kvs_errstr(ret));
         exit(1);
     }
-    stats_.num_store.fetch_add(1, std::memory_order_relaxed);
+
+    RecordTick(statistics, IO_PUT);
+    // stats_.num_store.fetch_add(1, std::memory_order_relaxed);
     return ret;
   }
   // (not support in device)
@@ -199,7 +203,9 @@ namespace kvssd {
         exit(1);
     }
     free(vbuf); // release buffer from kv_get
-    stats_.num_append.fetch_add(1, std::memory_order_relaxed);
+
+    RecordTick(statistics, IO_APPEND);
+    // stats_.num_append.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_append] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
     return ret;
   }
@@ -271,7 +277,8 @@ namespace kvssd {
 
     return kv_get_async(key, kv_append_async_callback, get_ctx);
 
-    stats_.num_append.fetch_add(1, std::memory_order_relaxed);
+    RecordTick(statistics, IO_APPEND);
+    // stats_.num_append.fetch_add(1, std::memory_order_relaxed);
   }
 
   kvs_result KVSSD::kv_get_oneshot(const Slice *key, char* vbuf, int vlen) {
@@ -315,10 +322,12 @@ namespace kvssd {
       kvsvalue.offset = init_size; // skip the first IO buffer (not support, actually read whole value)
       ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
 
-      stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
+      RecordTick(statistics, IO_GET);
+      // stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
       
     }
-    stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
+    RecordTick(statistics, IO_GET);
+    // stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_get] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), vlen);
     return ret;
   }
@@ -345,7 +354,8 @@ namespace kvssd {
       printf("kv_get_async error %d\n", ret);
       exit(1);
     }
-    stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
+    RecordTick(statistics, IO_GET);
+    // stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
     return KVS_SUCCESS;
   }
 
@@ -377,7 +387,8 @@ namespace kvssd {
         printf("delete tuple failed with error %s\n", kvs_errstr(ret));
         exit(1);
     }
-    stats_.num_delete.fetch_add(1, std::memory_order_relaxed);
+    RecordTick(statistics, IO_DEL);
+    // stats_.num_delete.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_delete] key: %s\n",std::string(key->data(),key->size()).c_str());
     return ret;
   }
@@ -393,8 +404,8 @@ namespace kvssd {
         printf("kv_delete_async error %s\n", kvs_errstr(ret));
         exit(1);
     }
-
-    stats_.num_delete.fetch_add(1, std::memory_order_relaxed);
+    RecordTick(statistics, IO_DEL);
+    // stats_.num_delete.fetch_add(1, std::memory_order_relaxed);
     return ret;
   }
 

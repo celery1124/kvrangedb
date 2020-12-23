@@ -11,7 +11,10 @@
 #include "slice.h"
 #include "kvs_api.h"
 
+#include "kvrangedb/statistics.h"
+
 #define INIT_GET_BUFF 65536 // 64KB
+using namespace kvrangedb;
 
 namespace kvssd {
 
@@ -37,11 +40,12 @@ namespace kvssd {
       kvs_device_handle dev;
       kvs_container_context ctx;
       kvs_container_handle cont_handle;
-      kvd_stats stats_;
+      Statistics *statistics;
+      // kvd_stats stats_;
 
       friend class kv_iter;
     public:
-      KVSSD(const char* dev_path) {
+      KVSSD(const char* dev_path, Statistics *stats) : statistics(stats) {
         memset(kvs_dev_path, 0, 32);
         memcpy(kvs_dev_path, dev_path, strlen(dev_path));
         kvs_init_env_opts(&options);
@@ -64,9 +68,9 @@ namespace kvssd {
       ~KVSSD() {
         kvs_close_container(cont_handle);
         kvs_close_device(dev);
-        FILE *fd = fopen("kv_device.log","w");
-        fprintf(fd, "store %d, append %d, get %d, delete %d\n",stats_.num_store.load(), stats_.num_append.load(), stats_.num_retrieve.load(), stats_.num_delete.load());
-        fclose(fd);
+        // FILE *fd = fopen("kv_device.log","w");
+        // fprintf(fd, "store %d, append %d, get %d, delete %d\n",stats_.num_store.load(), stats_.num_append.load(), stats_.num_retrieve.load(), stats_.num_delete.load());
+        // fclose(fd);
       }
       bool kv_exist (const Slice *key);
       uint32_t kv_get_size(const Slice *key);

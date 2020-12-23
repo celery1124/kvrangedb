@@ -26,6 +26,10 @@ enum Tickers : uint32_t {
   REQ_SEEK,
   REQ_NEXT,
   // I/O
+  IO_PUT,
+  IO_GET,
+  IO_DEL,
+  IO_APPEND,
   TICKER_ENUM_MAX
 };
 
@@ -35,6 +39,10 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {REQ_DEL, "req.delete"},
     {REQ_SEEK, "req.seek"},
     {REQ_NEXT, "req.next"},
+    {REQ_NEXT, "io.put"},
+    {REQ_NEXT, "io.get"},
+    {REQ_NEXT, "io.delete"},
+    {REQ_NEXT, "io.append"},
 };
 
 class Statistics {
@@ -72,12 +80,12 @@ public:
     tm_info = localtime(&timer);
     strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
 
-    printf("[%s] ", buffer);
+    fprintf(stderr, "[%s] ", buffer);
     for(int i = 0; i < TickersNameMap.size(); i++) {
-      printf("\t%s: %lu", TickersNameMap[i].second.c_str(), getTickCount(i));
-      if ((i+1)%6 == 0) printf("\n\t\t\t");
+      fprintf(stderr, "\t%s: %lu", TickersNameMap[i].second.c_str(), getTickCount(i));
+      if ((i+1)%6 == 0) fprintf(stderr, "\n\t\t");
     }
-    printf("\n");
+    fprintf(stderr, "\n");
   }
  
   void ReportStats(int interval) {

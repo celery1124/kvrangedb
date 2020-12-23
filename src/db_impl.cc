@@ -56,7 +56,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   sequence_(0),
   pack_threads_num(options.packThreadsNum),
   hot_keys_training_cnt_(0) {
-  kvd_ = new kvssd::KVSSD(dbname.c_str());
+  kvd_ = new kvssd::KVSSD(dbname.c_str(), options_.statistics.get());
   for (int i = 0; i < options.indexNum; i++) {
     std::string indexName = std::to_string(i);
     if (options.indexType == LSM) {
