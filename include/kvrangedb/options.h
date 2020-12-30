@@ -171,7 +171,7 @@ struct Options {
 			else if (strcmp(env_p, "INMEM") == 0)
 				indexType = INMEM;
       else
-        indexType = LSM;
+        indexType = ROCKS; // default
     }
 
     if(env_p = std::getenv("INDEX_NUM")) {
