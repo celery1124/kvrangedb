@@ -62,7 +62,7 @@ class Status {
 
   // Return a string representation of this status suitable for printing.
   // Returns the string "OK" for success.
-  std::string ToString() const;
+  std::string ToString() const { return "OK"; };
 
  private:
   // OK status has a NULL state_.  Otherwise, state_ is a new[] array
