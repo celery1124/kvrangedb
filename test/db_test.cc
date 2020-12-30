@@ -208,6 +208,26 @@ void DoScan(kvrangedb::DB *db, int num) {
   delete iter;
 }
 
+void FullScan(kvrangedb::DB *db) {
+  kvrangedb::ReadOptions rdopts;
+  Random rand(2020);
+  kvrangedb::Iterator* iter = db->NewIterator(rdopts);
+  
+  char key_buf[100]={0};
+  snprintf(key_buf, sizeof(key_buf), "%016d", 0);
+  //iter->SeekToFirst();
+  iter->Seek(key_buf);
+  int i = 0;
+  printf("Scan start key %s\n", std::string(key_buf, key_len).c_str());
+  while(iter->Valid()) {
+    kvrangedb::Slice val = iter->value();
+    printf("[Scan] #%d, Get key %s, value %s\n", ++i, iter->key().ToString().c_str(), std::string(val.data(), 8).c_str());
+
+    iter->Next();
+  }
+  delete iter;
+}
+
 class CustomComparator : public kvrangedb::Comparator {
 public:
   CustomComparator() {}
@@ -219,7 +239,7 @@ public:
 
 int main () {
   int thread_cnt = 1;
-  int num = 1000000;
+  int num = 10000;
   obj_len = 1000;
   key_len = 16;
 
@@ -230,11 +250,12 @@ int main () {
   options.indexNum = 1;
   options.indexType = kvrangedb::ROCKS;
   options.packThres = 10;
-  options.manualCompaction = true;
+  options.manualCompaction = false;
+  options.prefetchEnabled = false;
 
   kvrangedb::DB *db = NULL;
   //kvrangedb::DB::Open(options, "/dev/kvemul", &db);
-  kvrangedb::DB::Open(options, "/dev/nvme1n1", &db);
+  kvrangedb::DB::Open(options, "/dev/nvme3n1", &db);
 
   auto wcts = std::chrono::system_clock::now();
   std::thread *th_write[16];
@@ -262,6 +283,8 @@ int main () {
   // // for (int i = 0; i< thread_cnt; i++) {
   // //   th_seek[i]->join();
   // // }
+
+  FullScan(db);
 
   // DoScan(db, num*thread_cnt);
   for (int i = 0; i< thread_cnt; i++) {
