@@ -13,7 +13,7 @@
 #include <mutex>
 #include <condition_variable>
 
-//#define IO_DBG
+// #define IO_DBG
 
 namespace rocksdb {
 /*****  KVSSDEnvOpt  *****/
@@ -179,10 +179,10 @@ class KVWritableFileOpt : public WritableFile {
       kvssd::Slice *val = new kvssd::Slice (*valStr);
       Monitor *mon = new Monitor;
       AsyncStore_context *ctx = new AsyncStore_context(mon, keyStr, valStr, key, val);
-      kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
 #ifdef IO_DBG
-      printf("[env_writable] %s\n", keyStr->c_str());
+      printf("[env_writable] %s (%d)\n", keyStr->c_str(), (int)valStr->size());
 #endif
+      kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
       monList_.push_back(mon);
 
       offset_ += valStr->size();
@@ -210,11 +210,12 @@ class KVWritableFileOpt : public WritableFile {
     kvssd::Slice *val = new kvssd::Slice (*valStr);
     Monitor *mon = new Monitor;
     AsyncStore_context *ctx = new AsyncStore_context(mon, keyStr, valStr, key, val);
+#ifdef IO_DBG
+    printf("[env_writable] %s (%d), sst size %d\n", keyStr->c_str(), (int)valStr->size(), (int)offset_);
+#endif
+    if(valStr->size() > 3000000) exit(1);
     kvd_->kv_store_async(key, val, kv_store_async_cb, (void*)ctx);
     //kvd_->kv_store(key, val);
-#ifdef IO_DBG
-    printf("[env_writable] %s\n", keyStr->c_str());
-#endif
     monList_.push_back(mon);
 
     offset_ += valStr->size();
@@ -273,11 +274,11 @@ class KVAppendableFileOpt : public WritableFile {
     //Status s = SyncDirIfManifest();
     kvssd::Slice key (filename_);
     kvssd::Slice val (value_);
+#ifdef IO_DBG
+    printf("[env_appendable]: %s (%d)\n",filename_.c_str(), (int)value_.size());
+#endif
     kvd_->kv_store(&key, &val);
     //kvd_->kv_append(&key, &val);
-#ifdef IO_DBG
-    printf("[env_appendable]: %s\n",filename_.c_str());
-#endif
     synced = true;
     return Status::OK();
   }
