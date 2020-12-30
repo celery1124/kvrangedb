@@ -128,6 +128,10 @@ struct Options {
   // Default: 8
   int filterBitsPerKey;
 
+  // In-memory data cache size
+  // Default: 16 MB
+  int dataCacheSize;
+
   // Statistic (create to record count)
   // Default: NULL
   std::shared_ptr<Statistics> statistics;
@@ -154,6 +158,7 @@ struct Options {
               bgCompactionScanLength(100000),
               hotKeyTrainingNum(1000000),
               filterBitsPerKey(8),
+              dataCacheSize(16 << 20),
               statistics(nullptr) {
     // Load from environment variable
     char *env_p;

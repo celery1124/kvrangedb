@@ -93,6 +93,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
     printf("Initiated worker thread %d\n", i);
   }
   printf("Max Pack Size: %d\n", options_.packSize);
+
+  // initialize in-memory data cache
+  cache_ = NewLRUCache(options.dataCacheSize, 0);
 }
 
 DBImpl::~DBImpl() {
@@ -133,6 +136,7 @@ DBImpl::~DBImpl() {
 
   // save meta (sequence number)
   save_meta();
+  delete cache_;
 
   for (int i = 0; i < options_.indexNum; i++)
     delete key_idx_[i];
@@ -312,6 +316,12 @@ Status DBImpl::Put(const WriteOptions& options,
                      const Slice& key,
                      const Slice& value) {
   RecordTick(options_.statistics.get(), REQ_PUT);
+  //printf("KVRangeDB Put %s\n", std::string(key.data(), key.size()).c_str());
+
+  // insert to in-memory cache
+  std::string skey(key.data(), key.size());
+  Cache::Handle* h = insert_cache(skey, value);
+  release_cache(h);
 
   // smaller values
   if (value.size() < options_.packThres) {
@@ -346,6 +356,10 @@ Status DBImpl::Put(const WriteOptions& options,
 }
 
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
+  // delete in-memory cache
+  std::string skey(key.data(), key.size());
+  erase_cache(skey);
+
   RecordTick(options_.statistics.get(), REQ_DEL);
 
   kvssd::Slice del_key(key.data(), key.size());
@@ -412,6 +426,15 @@ Status DBImpl::Get(const ReadOptions& options,
                      const Slice& key,
                      std::string* value) {
   RecordTick(options_.statistics.get(), REQ_GET);
+  //printf("KVRangeDB Get %s\n", std::string(key.data(), key.size()).c_str());
+
+  // read in-memory cache
+  std::string skey(key.data(), key.size());
+  Cache::Handle *h = read_cache(skey, value);
+  if (h != NULL) { // hit in cache
+      release_cache(h);
+      return Status();
+  }
 
   bool possible_packed = true;
   bool possible_unpacked = true;
@@ -446,6 +469,11 @@ Status DBImpl::Get(const ReadOptions& options,
       bool found = do_unpack_KVs(vbuf, vlen, key, value);
       if (found) {
         free(vbuf);
+
+        // insert to in-memory cache
+        const Slice val(value->data(), value->size());
+        h = insert_cache(skey, val);
+        release_cache(h);
         return Status();
       }
       else {
@@ -462,6 +490,11 @@ Status DBImpl::Get(const ReadOptions& options,
     if (ret == 0) {
       value->append(vbuf, vlen);
       free(vbuf);
+
+      // insert to in-memory cache
+      const Slice val(value->data(), value->size());
+      h = insert_cache(skey, val);
+      release_cache(h);
       return Status();
     }
     else {
@@ -490,6 +523,11 @@ fallover:
       free(vbuf);
       std::chrono::duration<double, std::micro> hitLat = (std::chrono::system_clock::now() - wcts);
       bloomHitLat.fetch_add(hitLat.count(), std::memory_order_relaxed);
+
+      // insert to in-memory cache
+      const Slice val(value->data(), value->size());
+      h = insert_cache(skey, val);
+      release_cache(h);
       return Status();
     }
     else {
@@ -520,6 +558,11 @@ fallover:
         std::chrono::duration<double, std::micro> FPLat = (std::chrono::system_clock::now() - wcts);
         bloomFPLat.fetch_add(FPLat.count(), std::memory_order_relaxed);
         bloomFPCnt.fetch_add(1, std::memory_order_relaxed);
+        
+        // insert to in-memory cache
+        const Slice val(value->data(), value->size());
+        h = insert_cache(skey, val);
+        release_cache(h);
         return Status();
       }
       else {
@@ -541,6 +584,11 @@ fallover:
         std::chrono::duration<double, std::micro> MissLat = (std::chrono::system_clock::now() - wcts);
         bloomMissLat.fetch_add(MissLat.count(), std::memory_order_relaxed);
         bloomMissCnt.fetch_add(1, std::memory_order_relaxed);
+        
+        // insert to in-memory cache
+        const Slice val(value->data(), value->size());
+        h = insert_cache(skey, val);
+        release_cache(h);
         return Status();
       }
       else {

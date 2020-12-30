@@ -16,6 +16,7 @@
 #include "kv_index.h"
 #include "blockingconcurrentqueue.h"
 #include "bloom.h"
+#include "cache/cache.h"
 
 #define MAX_INDEX_NUM 8
 
@@ -58,6 +59,23 @@ struct packKVEntry {
               }
 };
 
+class CacheEntry { 
+public:
+    char *val;
+    int size;
+    CacheEntry() : val(NULL), size(0){};
+    CacheEntry(char *v, int s) : size(s) {
+        val = (char *)malloc(s);
+        memcpy(val, v, size);
+    }
+    ~CacheEntry() {if(val) free(val);}
+};
+template <class T>
+static void DeleteEntry(const Slice& /*key*/, void* value) {
+  T* typed_value = reinterpret_cast<T*>(value);
+  delete typed_value;
+}
+
 class DBImpl : public DB{
 friend class DBIterator;
 public:
@@ -98,6 +116,9 @@ private:
   std::unordered_map<std::string, int> hot_keys_;
   std::atomic<int> hot_keys_training_cnt_;
   std::string bf_;
+
+  // in-memory cache
+  Cache *cache_;
 
   void processQ(int id);
   void save_meta() {
@@ -176,6 +197,39 @@ private:
   void ManualCompaction();
   void BGCompaction();
   void BuildFilter();
+
+  // in-memory cache interface
+	Cache::Handle* read_cache(std::string& key, std::string* value) {
+        if (cache_==NULL) return NULL;
+        Cache::Handle *h = cache_->Lookup(key);
+        if (h != NULL) {
+            CacheEntry *rd_val = reinterpret_cast<CacheEntry*>(cache_->Value(h));
+            value->append(rd_val->val, rd_val->size);
+            RecordTick(options_.statistics.get(), CACHE_HIT);
+        }
+        else 
+            RecordTick(options_.statistics.get(), CACHE_MISS);
+        return h;
+    };
+    Cache::Handle* insert_cache(std::string& key, const Slice& value) {
+        if (cache_==NULL) return NULL;
+        CacheEntry *ins_val = new CacheEntry((char *)value.data(), value.size());
+        size_t charge = sizeof(CacheEntry) + value.size();
+        Cache::Handle *h = cache_->Insert(key, reinterpret_cast<void*>(ins_val), charge, DeleteEntry<CacheEntry*>);
+
+        RecordTick(options_.statistics.get(), CACHE_FILL);
+        return h;
+    };
+    void erase_cache(std::string& key) {
+        if (cache_==NULL) return ;
+        bool evicted = cache_->Erase(key);
+
+        if (evicted) RecordTick(options_.statistics.get(), CACHE_ERASE);
+    };
+    void release_cache(Cache::Handle* h) {
+        if (cache_==NULL) return ;
+        cache_->Release(h);
+    };
 
 public:
   // DEBUG ONLY
