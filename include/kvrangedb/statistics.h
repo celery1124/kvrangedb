@@ -30,6 +30,11 @@ enum Tickers : uint32_t {
   IO_GET,
   IO_DEL,
   IO_APPEND,
+  // Cache
+  CACHE_HIT,
+  CACHE_MISS,
+  CACHE_FILL,
+  CACHE_ERASE,
   TICKER_ENUM_MAX
 };
 
@@ -43,6 +48,10 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {REQ_NEXT, "io.get"},
     {REQ_NEXT, "io.delete"},
     {REQ_NEXT, "io.append"},
+    {REQ_NEXT, "cache.hit"},
+    {REQ_NEXT, "cache.miss"},
+    {REQ_NEXT, "cache.fill"},
+    {REQ_NEXT, "cache.erase"},
 };
 
 class Statistics {
