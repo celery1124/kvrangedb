@@ -215,7 +215,7 @@ private:
         if (cache_==NULL) return NULL;
         CacheEntry *ins_val = new CacheEntry((char *)value.data(), value.size());
         size_t charge = sizeof(CacheEntry) + value.size();
-        Cache::Handle *h = cache_->Insert(key, reinterpret_cast<void*>(ins_val), charge, DeleteEntry<CacheEntry*>);
+        Cache::Handle *h = cache_->Insert(key, reinterpret_cast<void*>(ins_val), charge, DeleteEntry<CacheEntry>);
 
         RecordTick(options_.statistics.get(), CACHE_FILL);
         return h;
