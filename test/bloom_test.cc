@@ -96,8 +96,11 @@ int main() {
             }
             std::chrono::duration<double> insertduration = (std::chrono::system_clock::now() - wcts);
             wcts = std::chrono::system_clock::now();
-
+#ifdef VERFIY
             int seed = num_keys - num_ops/2;
+#else
+            int seed = num_keys + num_ops/2;
+#endif
             int range_size = bench_range_dist[br];
             int neg_cnt = 0;
             int p_neg_cnt = 0;
