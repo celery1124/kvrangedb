@@ -84,7 +84,7 @@ class BloomFilter {
 class HiBloomFilter {
  public:
 
-  HiBloomFilter(int bits_per_key, int bits_per_level, int levels, int extend_bits, int num_keys, Statistics *stats) 
+  HiBloomFilter(int bits_per_key, int bits_per_level, int levels, int exam_suffix_bits, int num_keys, Statistics *stats) 
   : bits_per_level_(bits_per_level), levels_(levels), statistics_(stats) {
     
     int filter_bytes = 0;
@@ -92,8 +92,8 @@ class HiBloomFilter {
     k_ = new size_t[levels];
     bits_ = new size_t[levels];
     bf_ = new std::string[levels];
-    // extend_bits check beyond levels of BF, require more probes
-    range_dist_bits_thres_ = levels*bits_per_level + extend_bits;
+    // total # of suffix bits examined using filter, larger require more probes
+    range_dist_bits_thres_ = exam_suffix_bits;
     range_dist_bits_thres_ = range_dist_bits_thres_>30 ? 30 : range_dist_bits_thres_; // hard limit
 
     for (int i = 0; i < levels; i++) {

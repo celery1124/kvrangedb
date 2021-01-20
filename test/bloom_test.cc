@@ -42,7 +42,7 @@ int64_t fnvhash64(int64_t val) {
 
 int main() {
   std::shared_ptr<Statistics> stats = kvrangedb::Options::CreateDBStatistics();
-  HiBloomFilter hbf(32, 2, 4, 4, 16, stats.get());
+  HiBloomFilter hbf(32, 2, 4, 16, 16, stats.get());
 
   for (int i = 0; i < 16; i++) {
     Slice key((char *)&key_set[i], 4);
@@ -66,25 +66,25 @@ int main() {
   std::vector<int> bench_bits_per_level {1,2};
   std::vector<int> bench_bits_per_key {12, 16, 20, 24};
   std::vector<int> bench_range_dist {15, 31, 63, 127, 255, 511};
-  std::vector<int> bench_extend_bits {8};
+  std::vector<int> bench_exam_suffix_bits {16};
 
   // std::vector<int> bench_levels {4};
   // std::vector<int> bench_bits_per_level {1,2};
   // std::vector<int> bench_bits_per_key {24};
   // std::vector<int> bench_range_dist {15, 31, 63, 127, 255, 511};
-  // std::vector<int> bench_extend_bits {8};
+  // std::vector<int> bench_exam_suffix_bits {8};
 
 
   for (int br = 0; br < bench_range_dist.size(); br++ ) {
     for (int bbk = 0; bbk < bench_bits_per_key.size(); bbk++) {
       for (int bl = 0; bl < bench_levels.size(); bl++) {
         for (int bbl = 0; bbl < bench_bits_per_level.size(); bbl++) {
-          for (int be = 0; be < bench_extend_bits.size(); be++) {
-            printf("range_dist: %d, levels: %d, bits_per_level: %d, extend_bits: %d, bits_per_key: %d\n\n",bench_range_dist[br],bench_levels[bl], bench_bits_per_level[bbl], bench_extend_bits[be], bench_bits_per_key[bbk]); 
+          for (int be = 0; be < bench_exam_suffix_bits.size(); be++) {
+            printf("range_dist: %d, levels: %d, bits_per_level: %d, exam_suffix_bits: %d, bits_per_key: %d\n\n",bench_range_dist[br],bench_levels[bl], bench_bits_per_level[bbl], bench_exam_suffix_bits[be], bench_bits_per_key[bbk]); 
             auto wcts = std::chrono::system_clock::now();
             
             std::set<int64_t> ground_truth;
-            HiBloomFilter hbf2(bench_bits_per_key[bbk], bench_bits_per_level[bbl], bench_levels[bl], bench_extend_bits[be], num_keys, stats.get());
+            HiBloomFilter hbf2(bench_bits_per_key[bbk], bench_bits_per_level[bbl], bench_levels[bl], bench_exam_suffix_bits[be], num_keys, stats.get());
 
             for (int i = 0; i < num_keys; i++) {
               int64_t hashkey = fnvhash64(i);
