@@ -65,7 +65,7 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
 
 class Statistics {
 public:
-  std::atomic_uint_fast64_t tickers_[TICKER_ENUM_MAX] = {{0}};
+  std::atomic_ullong tickers_[TICKER_ENUM_MAX] = {{0}};
   std::thread *report_;
   pthread_t  report_tt_;
 public:
@@ -129,8 +129,9 @@ inline void RecordTick(Statistics* statistics, uint32_t ticker_type,
 
 inline uint64_t GetTickerCount(Statistics* statistics, uint32_t ticker_type) {
   if (statistics) {
-    statistics->getTickCount(ticker_type);
+    return statistics->getTickCount(ticker_type);
   }
+  return 0;
 }
 
 } // end of namespace
