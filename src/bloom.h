@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <strings.h>
 #include "kvrangedb/slice.h"
 #include "hash.h"
+#include "kvrangedb/statistics.h"
 
 namespace kvrangedb {
 
-namespace {
 static uint32_t BloomHash(const Slice& key) {
   return MurmurHash64A(key.data(), key.size(), 0xbc9f1d34);
 }
@@ -79,10 +80,203 @@ class BloomFilter {
   size_t bits_per_key_;
   size_t k_;
 };
-}  // namespace
+
+class HiBloomFilter {
+ public:
+
+  HiBloomFilter(int bits_per_key, int bits_per_level, int levels, int extend_bits, int num_keys, Statistics *stats) 
+  : bits_per_level_(bits_per_level), levels_(levels), statistics_(stats) {
+    
+    int filter_bytes = 0;
+    bits_per_key_ = new double[levels];
+    k_ = new size_t[levels];
+    bits_ = new size_t[levels];
+    bf_ = new std::string[levels];
+    // extend_bits check beyond levels of BF, require more probes
+    range_dist_bits_thres_ = levels*bits_per_level + extend_bits;
+    range_dist_bits_thres_ = range_dist_bits_thres_>30 ? 30 : range_dist_bits_thres_; // hard limit
+
+    for (int i = 0; i < levels; i++) {
+      // bits_per_key_[i] = (double)bits_per_key / levels;
+      // bits_per_key_[i] = (double)bits_per_key * (i+1) / ((levels+1)*levels/2);
+      bits_per_key_[i] = (double)bits_per_key * (levels-i) / ((levels+1)*levels/2);
+      // We intentionally round down to reduce probing cost a little bit
+      k_[i] = static_cast<size_t>(bits_per_key_[i] * 0.69);  // 0.69 =~ ln(2)
+      if (k_[i] < 1) k_[i] = 1;
+      if (k_[i] > 30) k_[i] = 30;
+      bits_[i] = static_cast<size_t>(num_keys * bits_per_key_[i]);
+      if (bits_[i] < 64) bits_[i] = 64;
+      bits_[i] = (bits_[i] + 7) / 8 * 8;
+
+      // filter data
+      bf_[i].resize(bits_[i]/8, 0);
+      bf_[i].push_back(static_cast<char>(k_[i]));
+      filter_bytes += (bits_[i]/8+1);
+    }
+    printf("HiBloomFilter size: %.3f MB\n", (double)filter_bytes/1024/1024);
+  }
+
+  ~HiBloomFilter() {
+    delete [] bits_per_key_;
+    delete [] k_;
+    delete [] bits_;
+    delete [] bf_;
+  }
+  
+  void InsertItem(const Slice& key)  {
+    std::string prefix_key = key.ToString();
+    size_t klen = key.size();
+    for (int l = 0; l < levels_; l++) {
+      char* array = &(bf_[l][0]);
+      // Use double-hashing to generate a sequence of hash values.
+      // See analysis in [Kirsch,Mitzenmacher 2006].
+      uint32_t h = BloomHash(prefix_key);
+      const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+      for (size_t j = 0; j < k_[l]; j++) {
+        const uint32_t bitpos = h % bits_[l];
+        array[bitpos / 8] |= (1 << (bitpos % 8));
+        h += delta;
+      }
+      // mask suffix for each level
+      uint32_t *suffix = (uint32_t *)&prefix_key[0];
+      *suffix = *suffix >> (l*bits_per_level_);
+      *suffix = *suffix << (l*bits_per_level_);
+    }
+  }
+
+  bool KeyMayMatch(const Slice& key) {
+    RecordTick(statistics_, FILTER_POINT_CHECK);
+    return KeyMayMatchLevel(key, 0); // last level BF
+  }
+
+  // Check range (lkey -> hkey) exist in filter (At most 1byte suffix)
+  // prefix - prefix key
+  // l - suffix index (multiple of bits_per_level_)
+  bool RangeCheck(uint32_t lkey, uint32_t hkey, std::string prefix, int l) {
+    uint32_t *suffix = (uint32_t *)&prefix[0];
+    if (*suffix > hkey || (*suffix+(1<<(l+1))-1) < lkey) {
+      // prefix not in range
+      return false;
+    }
+    if (*suffix >= lkey && (*suffix+(1<<(l+1))-1) <= hkey) {
+      // prefix in range
+      return Doubt(prefix, l);
+    }
+    uint32_t orig_suffix = *suffix;
+    for (int i = 0; i < (1<<bits_per_level_); i++) {
+      *suffix = orig_suffix | (i<<(l-bits_per_level_+1));
+      if (RangeCheck(lkey, hkey, prefix, l-bits_per_level_)) return true;
+    }
+    return false;
+  }
+
+  // Check prefix subtree exist in filter
+  // prefix - prefix key
+  // l - suffix index (multiple of bits_per_level_)
+  bool Doubt(std::string prefix, int l) {
+    if (l < -1) return true;
+    RecordTick(statistics_, FILTER_RANGE_PROBES);
+    uint32_t test = *(uint32_t *)&prefix[0];
+
+    if ((l+1)/bits_per_level_ < levels_)
+      if (!KeyMayMatchLevel(prefix, (l+1)/bits_per_level_)) return false;
+    uint32_t *suffix = (uint32_t *)&prefix[0];
+    uint32_t orig_suffix = *suffix;
+    for (int i = 0; i < (1<<bits_per_level_); i++) {
+      *suffix = orig_suffix | (i<<(l-bits_per_level_+1));
+      if (Doubt(prefix, l-bits_per_level_)) return true;
+    }
+    return false;
+  }
+
+  bool RangeMayMatch(const Slice& lkey, const Slice& hkey) {
+    RecordTick(statistics_, FILTER_RANGE_CHECK);
+    size_t range_dist_bits = FindRangeDistance(lkey, hkey);
+    // round to multiple bits_per_level
+    if (range_dist_bits%bits_per_level_ != 0)
+      range_dist_bits += (bits_per_level_ - range_dist_bits%bits_per_level_);
+    if (range_dist_bits > range_dist_bits_thres_) {
+      //printf("Prefix not long enough, range_dist_bits %d\n", range_dist_bits);
+      RecordTick(statistics_, FILTER_RANGE_PREFIX_SHORT);
+      return true;
+    } else {
+      std::string prefix = lkey.ToString();
+      uint32_t *suffix = (uint32_t *)&prefix[0];
+      *suffix = *suffix & (~0u << range_dist_bits);
+      return RangeCheck(*(uint32_t *)lkey.data(), *(uint32_t *)hkey.data(), prefix, range_dist_bits-1);
+    }
+  }
+
+
+ private:
+
+ bool KeyMayMatchLevel(const Slice& key, int l)  {
+    const size_t len = bf_[l].size();
+    //printf("Check Bloom filter level %d (%d), key %llX\n",l, len, *(uint64_t *)key.data());
+    if (len < 2) return false;
+
+    const char* array = bf_[l].data();
+    const size_t bits = (len - 1) * 8;
+
+    // Use the encoded k so that we can read filters generated by
+    // bloom filters created using different parameters.
+    const size_t k = array[len - 1];
+    if (k > 30) {
+      // Reserved for potentially new encodings for short bloom filters.
+      // Consider it a match.
+      return true;
+    }
+
+    uint32_t h = BloomHash(key);
+    const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+    for (size_t j = 0; j < k; j++) {
+      const uint32_t bitpos = h % bits;
+      if ((array[bitpos / 8] & (1 << (bitpos % 8))) == 0) {
+        return false;
+      }
+      h += delta;
+    }
+    return true;
+  }
+
+  size_t FindRangeDistance (const Slice& lkey, const Slice& hkey) {
+    assert(lkey.size() == hkey.size());
+    size_t klen = lkey.size();
+    size_t prefix_bits_len = 0;
+
+    // uint64_t *l = (uint64_t*)(lkey.data());
+    // uint64_t *h = (uint64_t*)(hkey.data());
+    // for (int i = 0; i < klen/8; i++) {
+    //   int64_t xor_64 = l[i] ^ h[i];
+    //   if (xor_64 == 0) prefix_bits_len += 64;
+    //   else {
+    //     int leading_zeros = __builtin_clz(xor_64);
+    //     return klen*8 - (prefix_bits_len+leading_zeros);
+    //   }
+    // }
+    uint8_t *ll = (uint8_t*)(lkey.data());
+    uint8_t *hh = (uint8_t*)(hkey.data());
+    for (int i = 0; i < klen; i++) {
+      uint8_t xor_8 = ll[klen-1-i] ^ hh[klen-1-i];
+      if (xor_8 == 0) prefix_bits_len += 8;
+      else {
+        int leading_zeros = __builtin_clz(xor_8) - 24;
+        return klen*8 - (prefix_bits_len+leading_zeros);
+      }
+    }
+  }
+  size_t range_dist_bits_thres_;
+  size_t bits_per_level_;
+  size_t levels_; // less than 8 due to memory budget
+  double *bits_per_key_;
+  size_t *k_;
+  size_t *bits_;
+  std::string *bf_;
+  Statistics *statistics_;
+};
 
 const BloomFilter* NewBloomFilter(int bits_per_key) {
   return new BloomFilter(bits_per_key);
 }
 
-}  // namespace leveldb
+}  // namespace kvrangedb

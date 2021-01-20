@@ -35,6 +35,11 @@ enum Tickers : uint32_t {
   CACHE_MISS,
   CACHE_FILL,
   CACHE_ERASE,
+  // Filter
+  FILTER_RANGE_CHECK,
+  FILTER_POINT_CHECK,
+  FILTER_RANGE_PREFIX_SHORT,
+  FILTER_RANGE_PROBES,
   TICKER_ENUM_MAX
 };
 
@@ -44,14 +49,18 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {REQ_DEL, "req.delete"},
     {REQ_SEEK, "req.seek"},
     {REQ_NEXT, "req.next"},
-    {REQ_NEXT, "io.put"},
-    {REQ_NEXT, "io.get"},
-    {REQ_NEXT, "io.delete"},
-    {REQ_NEXT, "io.append"},
-    {REQ_NEXT, "cache.hit"},
-    {REQ_NEXT, "cache.miss"},
-    {REQ_NEXT, "cache.fill"},
-    {REQ_NEXT, "cache.erase"},
+    {IO_PUT, "io.put"},
+    {IO_GET, "io.get"},
+    {IO_DEL, "io.delete"},
+    {IO_APPEND, "io.append"},
+    {CACHE_HIT, "cache.hit"},
+    {CACHE_MISS, "cache.miss"},
+    {CACHE_FILL, "cache.fill"},
+    {CACHE_ERASE, "cache.erase"},
+    {FILTER_RANGE_CHECK, "filter.range.check"},
+    {FILTER_POINT_CHECK, "filter.point.check"},
+    {FILTER_RANGE_PREFIX_SHORT, "filter.range.prefix.short"},
+    {FILTER_RANGE_PROBES, "filter.range.probes"},
 };
 
 class Statistics {
@@ -67,17 +76,22 @@ public:
   }
   ~Statistics() {
     pthread_cancel(report_tt_);
-     reportStats();
+    reportStats();
     delete report_;
   }
 
   void recordTick(uint32_t tickType, uint64_t count = 1) {
     if (tickType < TICKER_ENUM_MAX)
-      tickers_[tickType].fetch_add(count);
+      tickers_[tickType].fetch_add(count, std::memory_order_relaxed);
   }
   
   uint64_t getTickCount(uint32_t tickType) {
-    return tickers_[tickType].load();
+    return tickers_[tickType].load(std::memory_order_relaxed);
+  }
+
+  void Reset() {
+    for (int tick; tick < TICKER_ENUM_MAX; tick++)
+      tickers_[tick].store(0, std::memory_order_seq_cst);
   }
 
   void reportStats() {
@@ -113,7 +127,7 @@ inline void RecordTick(Statistics* statistics, uint32_t ticker_type,
   }
 }
 
-inline void GetTickerCount(Statistics* statistics, uint32_t ticker_type) {
+inline uint64_t GetTickerCount(Statistics* statistics, uint32_t ticker_type) {
   if (statistics) {
     statistics->getTickCount(ticker_type);
   }
