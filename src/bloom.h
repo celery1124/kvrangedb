@@ -175,11 +175,12 @@ class HiBloomFilter {
   // l - suffix index (multiple of bits_per_level_)
   bool Doubt(std::string prefix, int l) {
     if (l < -1) return true;
-    RecordTick(statistics_, FILTER_RANGE_PROBES);
     uint32_t test = *(uint32_t *)&prefix[0];
 
-    if ((l+1)/bits_per_level_ < levels_)
+    if ((l+1)/bits_per_level_ < levels_) {
+      RecordTick(statistics_, FILTER_RANGE_PROBES);
       if (!KeyMayMatchLevel(prefix, (l+1)/bits_per_level_)) return false;
+    }
     uint32_t *suffix = (uint32_t *)&prefix[0];
     uint32_t orig_suffix = *suffix;
     for (int i = 0; i < (1<<bits_per_level_); i++) {
