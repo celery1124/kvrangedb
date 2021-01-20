@@ -23,6 +23,8 @@ int key_set[16] = {1,3,66,57,58,59,511,513,15,18,21,26,31,32,35,46};
 #define FNV_PRIME_64  1099511628211L
 #define FNV_PRIME_32 16777619
 
+//#define VERFIY
+
 int64_t fnvhash64(int64_t val) {
     //from http://en.wikipedia.org/wiki/Fowler_Noll_Vo_hash
     int64_t hashval = FNV_OFFSET_BASIS_64;
@@ -88,8 +90,12 @@ int main() {
               int64_t hashkey = fnvhash64(i);
               Slice key((char *)&hashkey, 8);
               hbf2.InsertItem(key);
+#ifdef VERFIY
               ground_truth.insert(hashkey);
+#endif
             }
+            std::chrono::duration<double> insertduration = (std::chrono::system_clock::now() - wcts);
+            wcts = std::chrono::system_clock::now();
 
             int seed = num_keys - num_ops/2;
             int range_size = bench_range_dist[br];
@@ -106,7 +112,7 @@ int main() {
               
               if(!exist) neg_cnt++;
               if(!p_exist) p_neg_cnt++;
-
+#ifdef VERFIY
               std::set<int64_t>::iterator itlow;
               itlow=ground_truth.lower_bound (lowkey);
               bool ground_exist = (itlow != ground_truth.end() && *itlow < highkey);
@@ -116,19 +122,18 @@ int main() {
                 printf("[error] false negtive catched\n");
                 assert(false);
               }
-              if (exist) {
-                int test = 1;
-              }
-
+#endif
             }
             printf("range filter neg ratio: %.3f\npoint filter neg ratio: %.3f\n", double(neg_cnt)/num_ops, double(p_neg_cnt)/num_ops);
+#ifdef VERFIY
             printf("ground neg ratio: %.3f\n", double(ground_neg_cnt)/num_ops);
-
-            std::chrono::duration<double> wctduration = (std::chrono::system_clock::now() - wcts);
+#endif
+            std::chrono::duration<double> queryduration = (std::chrono::system_clock::now() - wcts);
+            std::cout << "Average insert time: " << insertduration.count()/num_keys*1e6 << " microseconds [Wall Clock]" << std::endl;
+            std::cout << "Average query time: " << queryduration.count()/num_ops*1e6 << " microseconds [Wall Clock]" << std::endl;
             std::cout << "Average #probes: " << (double)kvrangedb::GetTickerCount(stats.get(), FILTER_RANGE_PROBES) / num_ops << std::endl;
-            std::cout << "Average process time: " << wctduration.count()/num_ops*1e6 << " microseconds [Wall Clock]" << std::endl;
 
-            stats->reportStats();
+            // stats->reportStats();
             stats->Reset();
           }
         }
