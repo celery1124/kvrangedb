@@ -95,7 +95,10 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   printf("Max Pack Size: %d\n", options_.packSize);
 
   // initialize in-memory data cache
-  cache_ = NewLRUCache(options.dataCacheSize, 0);
+  if (options.dataCacheSize > 0)
+    cache_ = NewLRUCache(options.dataCacheSize, 0);
+  else 
+    cache_ = NULL;
 }
 
 DBImpl::~DBImpl() {
