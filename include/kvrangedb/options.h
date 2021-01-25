@@ -10,6 +10,7 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 #include <memory>
 #include <string>
 
@@ -28,6 +29,12 @@ enum IndexType {
   BTREE,
   BASE,
 	INMEM
+};
+
+enum RangeFilterType {
+  NoFilter,
+  HiBloom,
+  RBloom
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
@@ -132,6 +139,30 @@ struct Options {
   // Default: 16 MB
   int dataCacheSize;
 
+  // Range filter type
+  // Default: HiBloom
+  RangeFilterType rfType;
+
+  // Range filter number of keys
+  // Default: 
+  int rfNumKeys;
+
+  // Range filter bits per key
+  // Default: 16
+  int rfBitsPerKey;
+
+  // Range filter exam suffix bits
+  // Default: 16
+  int rfExamBits;
+
+  // Range filter levels (HiBloom)
+  // Default: 1
+  int rfLevels;
+
+  // Range filter bits per level (HiBloom)
+  // Default: 1
+  int rfBitsPerLevel;
+
   // Statistic (create to record count)
   // Default: NULL
   std::shared_ptr<Statistics> statistics;
@@ -159,6 +190,12 @@ struct Options {
               hotKeyTrainingNum(1000000),
               filterBitsPerKey(8),
               dataCacheSize(16 << 20),
+              rfType(NoFilter),
+              rfNumKeys(1000000000),
+              rfBitsPerKey(16),
+              rfExamBits(16),
+              rfLevels(1),
+              rfBitsPerLevel(1),
               statistics(nullptr) {
     // Load from environment variable
     char *env_p;

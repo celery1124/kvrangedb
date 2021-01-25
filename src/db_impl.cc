@@ -19,14 +19,6 @@ extern double hitCost;
 extern double missCost;
 extern double hitNextCost;
 extern double missNextCost;
-std::atomic<uint32_t> bloomHitCnt{0};
-std::atomic<uint32_t> bloomHitLat{0};
-std::atomic<uint32_t> bloomFPCnt{0};
-std::atomic<uint32_t> bloomFPLat{0};
-std::atomic<uint32_t> bloomMissCnt{0};
-std::atomic<uint32_t> bloomMissLat{0};
-std::atomic<uint32_t> bloomIDXLat{0};
-std::atomic<uint32_t> bloomLat{0};
 namespace kvrangedb {
 
 // WriteBatch definition
@@ -98,7 +90,21 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   if (options.dataCacheSize > 0)
     cache_ = NewLRUCache(options.dataCacheSize, 0);
   else 
-    cache_ = NULL;
+    cache_ = NewLRUCache(1<<20, 0); // minimum in-memory cache (1MB) for get consistance
+
+  // initialize range filter
+  if (options.rfType == HiBloom) {
+    rf_ = NewHiBloomFilter(options.rfBitsPerKey, options.rfBitsPerLevel, options.rfLevels,
+    options.rfExamBits, options.rfNumKeys, options_.statistics.get());
+  }
+  else if (options.rfType == RBloom) {
+    rf_ = NewRBloomFilter(options.rfBitsPerKey, options.rfExamBits, options.rfNumKeys, 
+    options_.statistics.get());
+  }
+  else { // NoFilter
+    rf_ = nullptr;
+  }
+  if (rf_) BuildRangeFilter();
 }
 
 DBImpl::~DBImpl() {
@@ -116,7 +122,7 @@ DBImpl::~DBImpl() {
     printf("Start ManualCompaction\n");
     ManualCompaction();
     printf("Start filter building\n");
-    BuildFilter();
+    BuildBloomFilter();
   }
 
   // shutdown packing threads
@@ -147,9 +153,6 @@ DBImpl::~DBImpl() {
   printf("hitCnt = %d\n", hitCnt);
   printf("hitCost = %.3f, missCost = %.3f\n", hitCost, missCost);
   printf("hitNextCost = %.3f, missNextCost = %.3f\n", hitNextCost, missNextCost);
-  printf("bloomHitCnt = %d (%.3f us), bloomFPCnt = %d (%.3f us), bloomMissCnt = %d (%.3f us), idx: %.3f us, bloom_check: %.3f\n", bloomHitCnt.load(), (double)bloomHitLat.load()/bloomHitCnt.load(), bloomFPCnt.load(), (double)bloomFPLat.load()/bloomFPCnt.load(), bloomMissCnt.load(), (double)bloomMissLat.load()/bloomMissCnt.load(), (double)bloomIDXLat.load()/(bloomFPCnt.load()+bloomMissCnt.load()), (double)bloomLat.load()/10000000);
-  printf("bloomHitRatio = %.3f\n", (double)(bloomHitCnt.load()-bloomFPCnt.load())/(bloomHitCnt.load()+bloomMissCnt.load()));
-  printf("bloomFPRatio = %.3f\n", (double)bloomFPCnt.load()/(bloomHitCnt.load()+bloomMissCnt.load()));
 }
 
 // bulk dequeue, either dequeue max_size or wait for time out
@@ -509,13 +512,9 @@ Status DBImpl::Get(const ReadOptions& options,
 
   // auto (fall over)
 fallover:
-  auto wcts = std::chrono::system_clock::now();
   // bloom filter check 
   bool filter_found = do_check_filter(key);
-  std::chrono::duration<double, std::micro> Lat = (std::chrono::system_clock::now() - wcts);
-  bloomLat.fetch_add(Lat.count(), std::memory_order_relaxed);
   if(possible_unpacked && filter_found) { // filter hit
-    bloomHitCnt.fetch_add(1, std::memory_order_relaxed);
     kvssd::Slice get_key(key.data(), key.size());
     char *vbuf;
     int vlen;
@@ -524,8 +523,6 @@ fallover:
     if (ret == 0) {
       value->append(vbuf, vlen);
       free(vbuf);
-      std::chrono::duration<double, std::micro> hitLat = (std::chrono::system_clock::now() - wcts);
-      bloomHitLat.fetch_add(hitLat.count(), std::memory_order_relaxed);
 
       // insert to in-memory cache
       const Slice val(value->data(), value->size());
@@ -539,7 +536,6 @@ fallover:
   }
 
   if (possible_packed) { // filter miss
-    //bloomMissCnt.fetch_add(1, std::memory_order_relaxed);
     // index lookup
     Slice lkey(key.data(), key.size());
     std::string pkey;
@@ -547,10 +543,7 @@ fallover:
     if (!idx_found) { // definitely not found
       return Status().NotFound(Slice());
     }
-    std::chrono::duration<double, std::micro> IDXLat = (std::chrono::system_clock::now() - wcts);
-    bloomIDXLat.fetch_add(IDXLat.count(), std::memory_order_relaxed);
     if(pkey.size() == 0) { // possible filter false positive
-      //if(filter_found) bloomFPCnt.fetch_add(1, std::memory_order_relaxed);
       kvssd::Slice get_key(key.data(), key.size());
       char *vbuf;
       int vlen;
@@ -558,9 +551,6 @@ fallover:
       if (ret == 0) {
         value->append(vbuf, vlen);
         free(vbuf);
-        std::chrono::duration<double, std::micro> FPLat = (std::chrono::system_clock::now() - wcts);
-        bloomFPLat.fetch_add(FPLat.count(), std::memory_order_relaxed);
-        bloomFPCnt.fetch_add(1, std::memory_order_relaxed);
         
         // insert to in-memory cache
         const Slice val(value->data(), value->size());
@@ -584,9 +574,6 @@ fallover:
       
       if (found) {
         free(vbuf);
-        std::chrono::duration<double, std::micro> MissLat = (std::chrono::system_clock::now() - wcts);
-        bloomMissLat.fetch_add(MissLat.count(), std::memory_order_relaxed);
-        bloomMissCnt.fetch_add(1, std::memory_order_relaxed);
         
         // insert to in-memory cache
         const Slice val(value->data(), value->size());
@@ -813,7 +800,7 @@ void DBImpl::ManualCompaction() {
   delete it_;
 }
 
-void DBImpl::BuildFilter() {
+void DBImpl::BuildBloomFilter() {
   bf_.clear();
   BloomFilter bf(options_.filterBitsPerKey);
   int key_cnt = 0;
@@ -826,6 +813,31 @@ void DBImpl::BuildFilter() {
   }
   bf.CreateFilter(&tmp_keys[0], key_cnt, &bf_);
   printf("Bloom Filter created, %d keys, %d bytes\n", key_cnt, bf_.size());
+}
+
+void DBImpl::BuildRangeFilter() {
+  assert(rf_);
+
+  struct timespec ts_start;
+  struct timespec ts_end;
+  uint64_t elapsed;
+  clock_gettime(CLOCK_MONOTONIC, &ts_start);
+
+  const ReadOptions options;
+  int key_cnts = 0;
+  IDXIterator *it_ = key_idx_[0]->NewIterator(options);
+  it_->SeekToFirst();
+  while(it_->Valid()) {
+    rf_->InsertItem(it_->key());
+    key_cnts++;
+  }
+
+  clock_gettime(CLOCK_MONOTONIC, &ts_end);
+  elapsed = static_cast<uint64_t>(ts_end.tv_sec) * 1000000000UL +
+  static_cast<uint64_t>(ts_end.tv_nsec) -
+  static_cast<uint64_t>(ts_start.tv_sec) * 1000000000UL +
+  static_cast<uint64_t>(ts_start.tv_nsec);
+  printf("Range Filter created, elapsed %.3f, #keys %d\n", (static_cast<double>(elapsed) / 1000000000.), key_cnts);
 }
 
 Status DB::Open(const Options& options, const std::string& dbname,

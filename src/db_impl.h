@@ -15,7 +15,7 @@
 #include "kvssd/kvssd.h"
 #include "kv_index.h"
 #include "blockingconcurrentqueue.h"
-#include "bloom.h"
+#include "filter.h"
 #include "cache/cache.h"
 
 #define MAX_INDEX_NUM 8
@@ -120,6 +120,9 @@ private:
   // in-memory cache
   Cache *cache_;
 
+  // Range filter
+  RangeFilter *rf_;
+
   void processQ(int id);
   void save_meta() {
     std::string meta;
@@ -196,7 +199,8 @@ private:
 
   void ManualCompaction();
   void BGCompaction();
-  void BuildFilter();
+  void BuildBloomFilter();
+  void BuildRangeFilter();
 
   // in-memory cache interface
 	Cache::Handle* read_cache(std::string& key, std::string* value) {
