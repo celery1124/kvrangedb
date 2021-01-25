@@ -192,7 +192,7 @@ private:
 
 DBIterator::DBIterator(DBImpl *db, const ReadOptions &options) 
 : db_(db), options_(options), kvd_(db->GetKVSSD()), valid_(false),
-  prefetch_depth_(options.scan_length), queue_cur_(0), 
+  prefetch_depth_(options.scan_length + 1), queue_cur_(0), 
   isPacked_(false), packedIdx_(0) {
   
   if (options_.upper_key != NULL) {
@@ -349,6 +349,11 @@ static bool isHelperKV(char *vbuf, int vlen) {
 
 void DBIterator::Seek(const Slice& target) { 
   RecordTick(db_->options_.statistics.get(), REQ_SEEK);
+  // check range filter if needed
+  if (upper_key_.size() > 0 && db_->rf_ && db_->rf_->RangeMayMatch(target, upper_key_)) {
+    valid_ = false;
+  }
+  
   auto wcts = std::chrono::system_clock::now();
   // training helper record
   if (db_->options_.helperHint == 1) {

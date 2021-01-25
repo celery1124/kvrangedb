@@ -434,6 +434,11 @@ Status DBImpl::Get(const ReadOptions& options,
   RecordTick(options_.statistics.get(), REQ_GET);
   //printf("KVRangeDB Get %s\n", std::string(key.data(), key.size()).c_str());
 
+  // check range filter if needed
+  if (rf_ && (!rf_->KeyMayMatch(key))) {
+    return Status().NotFound(Slice()); 
+  }
+
   // read in-memory cache
   std::string skey(key.data(), key.size());
   Cache::Handle *h = read_cache(skey, value);
