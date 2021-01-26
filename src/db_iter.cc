@@ -353,6 +353,7 @@ void DBIterator::Seek(const Slice& target) {
   if (upper_key_.size() > 0 && db_->rf_ && db_->rf_->RangeMayMatch(target, upper_key_)) {
     RecordTick(db_->options_.statistics.get(), FILTER_RANGE_NEGATIVE);
     valid_ = false;
+    return;
   }
   RecordTick(db_->options_.statistics.get(), FILTER_RANGE_POSITIVE);
   
