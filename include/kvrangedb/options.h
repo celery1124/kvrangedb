@@ -136,7 +136,7 @@ struct Options {
   int filterBitsPerKey;
 
   // In-memory data cache size
-  // Default: 16 MB
+  // Default: 16 (MB)
   int dataCacheSize;
 
   // Range filter type
@@ -189,7 +189,7 @@ struct Options {
               bgCompactionScanLength(100000),
               hotKeyTrainingNum(1000000),
               filterBitsPerKey(8),
-              dataCacheSize(16 << 20),
+              dataCacheSize(16),
               rfType(NoFilter),
               rfNumKeys(1000000000),
               rfBitsPerKey(16),
