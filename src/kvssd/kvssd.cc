@@ -297,6 +297,7 @@ namespace kvssd {
   }
 
   kvs_result KVSSD::kv_get(const Slice *key, char*& vbuf, int& vlen, int init_size /* default = INIT_GET_BUFF */) {
+    RecordTick(statistics, IO_GET);
     vbuf = (char *) malloc(init_size);
     const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size() };
     kvs_value kvsvalue = { vbuf, init_size , 0, 0 /*offset */}; //prepare initial buffer
@@ -326,7 +327,6 @@ namespace kvssd {
       // stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
       
     }
-    RecordTick(statistics, IO_GET);
     // stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_get] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), vlen);
     return ret;
