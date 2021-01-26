@@ -38,8 +38,12 @@ enum Tickers : uint32_t {
   // Filter
   FILTER_RANGE_CHECK,
   FILTER_POINT_CHECK,
+  FILTER_POINT_POSITIVE,
+  FILTER_POINT_NEGATIVE,
   FILTER_RANGE_PREFIX_SHORT,
   FILTER_RANGE_PROBES,
+  FILTER_RANGE_POSITIVE,
+  FILTER_RANGE_NEGATIVE,
   TICKER_ENUM_MAX
 };
 
@@ -59,8 +63,12 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {CACHE_ERASE, "cache.erase"},
     {FILTER_RANGE_CHECK, "filter.range.check"},
     {FILTER_POINT_CHECK, "filter.point.check"},
+    {FILTER_POINT_POSITIVE, "filter.point.positive"},
+    {FILTER_POINT_NEGATIVE, "filter.point.negative"},
     {FILTER_RANGE_PREFIX_SHORT, "filter.range.prefix.short"},
     {FILTER_RANGE_PROBES, "filter.range.probes"},
+    {FILTER_RANGE_POSITIVE, "filter.range.positive"},
+    {FILTER_RANGE_NEGATIVE, "filter.range.negative"},
 };
 
 class Statistics {

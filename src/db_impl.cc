@@ -436,8 +436,10 @@ Status DBImpl::Get(const ReadOptions& options,
 
   // check range filter if needed
   if (rf_ && (!rf_->KeyMayMatch(key))) {
+    RecordTick(options_.statistics.get(), FILTER_POINT_NEGATIVE);
     return Status().NotFound(Slice()); 
   }
+  RecordTick(options_.statistics.get(), FILTER_POINT_POSITIVE);
 
   // read in-memory cache
   std::string skey(key.data(), key.size());
@@ -834,6 +836,7 @@ void DBImpl::BuildRangeFilter() {
   it_->SeekToFirst();
   while(it_->Valid()) {
     rf_->InsertItem(it_->key());
+    it_->Next();
     key_cnts++;
   }
 
