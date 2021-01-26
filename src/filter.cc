@@ -213,8 +213,8 @@ class HiBloomFilter : public RangeFilter {
 class RBloomFilter : public RangeFilter {
  public:
 
-  RBloomFilter(int bits_per_key, int max_probes, int num_keys, Statistics *stats) 
-  : max_probes_(max_probes), bits_per_key_(bits_per_key), statistics_(stats) {
+  RBloomFilter(int bits_per_key, int max_probes_bits, int num_keys, Statistics *stats) 
+  : max_probes_(1<<max_probes_bits - 1), bits_per_key_(bits_per_key), statistics_(stats) {
     
     int filter_bytes = 0;
     // We intentionally round down to reduce probing cost a little bit
@@ -317,8 +317,8 @@ RangeFilter* NewHiBloomFilter(int bits_per_key, int bits_per_level, int levels, 
   return new HiBloomFilter(bits_per_key, bits_per_level, levels, exam_suffix_bits, num_keys, stats);
 }
 
-RangeFilter* NewRBloomFilter(int bits_per_key, int max_probes, int num_keys, Statistics *stats) {
-  return new RBloomFilter(bits_per_key, max_probes, num_keys, stats);
+RangeFilter* NewRBloomFilter(int bits_per_key, int max_probes_bits, int num_keys, Statistics *stats) {
+  return new RBloomFilter(bits_per_key, max_probes_bits, num_keys, stats);
 }
 
 }  // namespace kvrangedb
