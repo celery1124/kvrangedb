@@ -351,10 +351,10 @@ void DBIterator::Seek(const Slice& target) {
   RecordTick(db_->options_.statistics.get(), REQ_SEEK);
   // check range filter if needed
   if (upper_key_.size() > 0 && db_->rf_ && db_->rf_->RangeMayMatch(target, upper_key_)) {
-    RecordTick(options_.statistics.get(), FILTER_RANGE_NEGATIVE);
+    RecordTick(db_->options_.statistics.get(), FILTER_RANGE_NEGATIVE);
     valid_ = false;
   }
-  RecordTick(options_.statistics.get(), FILTER_RANGE_POSITIVE);
+  RecordTick(db_->options_.statistics.get(), FILTER_RANGE_POSITIVE);
   
   auto wcts = std::chrono::system_clock::now();
   // training helper record
