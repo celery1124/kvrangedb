@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-
+#include <algorithm>
 #include "filter.h"
 
 namespace kvrangedb {
@@ -77,7 +77,13 @@ class HiBloomFilter : public RangeFilter {
 
   bool RangeMayMatch(const Slice& lkey, const Slice& hkey) {
     RecordTick(statistics_, FILTER_RANGE_CHECK);
-    size_t range_dist_bits = FindRangeDistance(lkey, hkey);
+
+    std::string start_key = lkey.ToString();
+    std::string end_key = hkey.ToString();
+    std::reverse(start_key.begin(), start_key.end());
+    std::reverse(end_key.begin(), end_key.end());
+
+    size_t range_dist_bits = FindRangeDistance(start_key, end_key);
     // round to multiple bits_per_level
     if (range_dist_bits%bits_per_level_ != 0)
       range_dist_bits += (bits_per_level_ - range_dist_bits%bits_per_level_);
@@ -86,10 +92,10 @@ class HiBloomFilter : public RangeFilter {
       RecordTick(statistics_, FILTER_RANGE_PREFIX_SHORT);
       return true;
     } else {
-      std::string prefix = lkey.ToString();
+      std::string prefix = start_key;
       uint32_t *suffix = (uint32_t *)&prefix[0];
       *suffix = *suffix & (~0u << range_dist_bits);
-      return RangeCheck(*(uint32_t *)lkey.data(), *(uint32_t *)hkey.data(), prefix, range_dist_bits-1);
+      return RangeCheck(*(uint32_t *)start_key.data(), *(uint32_t *)end_key.data(), prefix, range_dist_bits-1);
     }
   }
 
@@ -126,7 +132,8 @@ class HiBloomFilter : public RangeFilter {
 
     if ((l+1)/bits_per_level_ < levels_) {
       RecordTick(statistics_, FILTER_RANGE_PROBES);
-      if (!KeyMayMatchLevel(prefix, (l+1)/bits_per_level_)) return false;
+      std::string check_key(prefix.rbegin(), prefix.rend());
+      if (!KeyMayMatchLevel(check_key, (l+1)/bits_per_level_)) return false;
     }
     uint32_t *suffix = (uint32_t *)&prefix[0];
     uint32_t orig_suffix = *suffix;
@@ -275,11 +282,15 @@ class RBloomFilter : public RangeFilter {
 
     std::string curr_key = lkey.ToString();
     std::string end_key = hkey.ToString();
+    std::reverse(curr_key.begin(), curr_key.end());
+    std::reverse(end_key.begin(), end_key.end());
+
     uint32_t *suffix = (uint32_t *)&curr_key[0];
     uint32_t end_suffix = *(uint32_t *)&end_key[0];
     for (int i = 0; i < max_probes_&&(*suffix)<=end_suffix; i++) {
       RecordTick(statistics_, FILTER_RANGE_PROBES);
-      if (KeyMayMatch(curr_key)) return true;
+      std::string check_key (curr_key.rbegin(), curr_key.rend());
+      if (KeyMayMatch(check_key)) return true;
       (*suffix)++;
     }
     if (*suffix > end_suffix) return false;
