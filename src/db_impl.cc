@@ -124,8 +124,9 @@ DBImpl::~DBImpl() {
     std::ifstream f(filter_name.c_str());
     if(!f.good()) {
       rf_->SaveFilter(filter_name);
+      printf("Save range filter as %s\n", filter_name.c_str());
     }
-    printf("Save range filter as %s\n", filter_name.c_str());
+    printf("Range filter as %s already saved\n", filter_name.c_str());
   }
 
 
