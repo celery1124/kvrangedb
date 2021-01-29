@@ -51,7 +51,7 @@ class HiBloomFilter : public RangeFilter {
   }
 
   virtual std::string GenFilterName() {
-    return "/tmp/HiBloomFilter_"+std::to_string(num_keys_)+std::to_string(total_bits_per_key_)+std::to_string(levels_);
+    return "/tmp/HiBloomFilter_"+std::to_string(num_keys_)+"_"+std::to_string(total_bits_per_key_)+"_"+std::to_string(levels_);
   }
 
   void LoadFilter(std::string filename) {
@@ -65,6 +65,10 @@ class HiBloomFilter : public RangeFilter {
   }
 
   void SaveFilter(std::string filename) {
+    std::ofstream filterFile;
+    filterFile.open (filename.c_str(), std::ios::out | std::ios::binary);
+    filterFile << "";
+    filterFile.close();
     for (int i = 0; i < levels_; i++) {
       std::ofstream filterFile;
       std::string fn = filename+"_"+std::to_string(i);
@@ -265,7 +269,7 @@ class RBloomFilter : public RangeFilter {
   ~RBloomFilter() {}
 
   virtual std::string GenFilterName() {
-    return "/tmp/RBloomFilter_"+std::to_string(num_keys_)+std::to_string(bits_per_key_);
+    return "/tmp/RBloomFilter_"+std::to_string(num_keys_)+"_"+std::to_string(bits_per_key_);
   }
 
   void LoadFilter(std::string filename) {
