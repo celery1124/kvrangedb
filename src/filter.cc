@@ -59,7 +59,10 @@ class HiBloomFilter : public RangeFilter {
       std::ifstream filterFile;
       std::string fn = filename+"_"+std::to_string(i);
       filterFile.open (fn.c_str(), std::ios::in | std::ios::binary);
-      filterFile >> bf_[i];
+      std::string tmp;
+      filterFile >> tmp;
+      assert(tmp.size() == bf_[i].size());
+      memcpy((void*)bf_[i].data(), tmp.data(), tmp.size());
       filterFile.close();
     }
   }
@@ -275,7 +278,10 @@ class RBloomFilter : public RangeFilter {
   void LoadFilter(std::string filename) {
     std::ifstream filterFile;
     filterFile.open (filename.c_str(), std::ios::in | std::ios::binary);
-    filterFile >> bf_;
+    std::string tmp;
+    filterFile >> tmp;
+    assert(tmp.size() == bf_.size());
+    memcpy((void*)bf_.data(), tmp.data(), tmp.size());
     filterFile.close();
   }
 
