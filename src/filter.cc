@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include "filter.h"
+#include <string>
 
 namespace kvrangedb {
 
@@ -11,7 +12,7 @@ class HiBloomFilter : public RangeFilter {
  public:
 
   HiBloomFilter(int bits_per_key, int bits_per_level, int levels, int exam_suffix_bits, int num_keys, Statistics *stats) 
-  : bits_per_level_(bits_per_level), levels_(levels), statistics_(stats) {
+  : num_keys_(num_keys), bits_per_level_(bits_per_level), levels_(levels), total_bits_per_key_(bits_per_key), statistics_(stats) {
     
     int filter_bytes = 0;
     bits_per_key_ = new double[levels];
@@ -47,6 +48,30 @@ class HiBloomFilter : public RangeFilter {
     delete [] k_;
     delete [] bits_;
     delete [] bf_;
+  }
+
+  virtual std::string GenFilterName() {
+    return "/tmp/HiBloomFilter_"+std::to_string(num_keys_)+std::to_string(total_bits_per_key_)+std::to_string(levels_);
+  }
+
+  void LoadFilter(std::string filename) {
+    for (int i = 0; i < levels_; i++) {
+      std::ifstream filterFile;
+      std::string fn = filename+"_"+std::to_string(i);
+      filterFile.open (fn.c_str(), std::ios::in | std::ios::binary);
+      filterFile >> bf_[i];
+      filterFile.close();
+    }
+  }
+
+  void SaveFilter(std::string filename) {
+    for (int i = 0; i < levels_; i++) {
+      std::ofstream filterFile;
+      std::string fn = filename+"_"+std::to_string(i);
+      filterFile.open (fn.c_str(), std::ios::out | std::ios::binary);
+      filterFile << bf_[i];
+      filterFile.close();
+    }
   }
   
   void InsertItem(const Slice& key)  {
@@ -199,9 +224,12 @@ class HiBloomFilter : public RangeFilter {
       }
     }
   }
+
+  size_t num_keys_;
   size_t range_dist_bits_thres_;
   size_t bits_per_level_;
   size_t levels_; // less than 8 due to memory budget
+  size_t total_bits_per_key_;
   double *bits_per_key_;
   size_t *k_;
   size_t *bits_;
@@ -214,7 +242,8 @@ class RBloomFilter : public RangeFilter {
  public:
 
   RBloomFilter(int bits_per_key, int max_probes_bits, int num_keys, Statistics *stats) 
-  : max_probes_(1<<max_probes_bits - 1), bits_per_key_(bits_per_key), statistics_(stats) {
+  : num_keys_(num_keys), max_probes_(1<<max_probes_bits - 1), bits_per_key_(bits_per_key), 
+  statistics_(stats) {
     
     int filter_bytes = 0;
     // We intentionally round down to reduce probing cost a little bit
@@ -234,6 +263,24 @@ class RBloomFilter : public RangeFilter {
   }
 
   ~RBloomFilter() {}
+
+  virtual std::string GenFilterName() {
+    return "/tmp/RBloomFilter_"+std::to_string(num_keys_)+std::to_string(bits_per_key_);
+  }
+
+  void LoadFilter(std::string filename) {
+    std::ifstream filterFile;
+    filterFile.open (filename.c_str(), std::ios::in | std::ios::binary);
+    filterFile >> bf_;
+    filterFile.close();
+  }
+
+  void SaveFilter(std::string filename) {
+    std::ofstream filterFile;
+    filterFile.open (filename.c_str(), std::ios::out | std::ios::binary);
+    filterFile << bf_;
+    filterFile.close();
+  }
   
   void InsertItem(const Slice& key)  {
     size_t klen = key.size();
@@ -247,7 +294,7 @@ class RBloomFilter : public RangeFilter {
       array[bitpos / 8] |= (1 << (bitpos % 8));
       h += delta;
     }
-    }
+  }
 
   bool KeyMayMatch(const Slice& key) {
     RecordTick(statistics_, FILTER_POINT_CHECK);
@@ -300,6 +347,7 @@ class RBloomFilter : public RangeFilter {
 
  private:
 
+  size_t num_keys_;
   size_t max_probes_;
   double bits_per_key_;
   size_t k_;

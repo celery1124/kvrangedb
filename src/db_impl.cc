@@ -118,6 +118,16 @@ DBImpl::~DBImpl() {
   }
   sleep(1);
 
+  // save range filter temporarily if needed
+  if (rf_) {
+    std::string filter_name = rf_->GenFilterName();
+    std::ifstream f(filter_name.c_str());
+    if(!f.good()) {
+      rf_->SaveFilter(filter_name);
+    }
+  }
+
+
   if (options_.manualCompaction) {
     printf("Start ManualCompaction\n");
     ManualCompaction();
@@ -830,22 +840,36 @@ void DBImpl::BuildRangeFilter() {
   uint64_t elapsed;
   clock_gettime(CLOCK_MONOTONIC, &ts_start);
 
-  const ReadOptions options;
-  int key_cnts = 0;
-  IDXIterator *it_ = key_idx_[0]->NewIterator(options);
-  it_->SeekToFirst();
-  while(it_->Valid()) {
-    rf_->InsertItem(it_->key());
-    it_->Next();
-    key_cnts++;
-  }
+  std::string filter_name = rf_->GenFilterName();
+  std::ifstream f(filter_name.c_str());
+  if(f.good()) {
+    rf_->LoadFilter(filter_name);
 
-  clock_gettime(CLOCK_MONOTONIC, &ts_end);
-  elapsed = static_cast<uint64_t>(ts_end.tv_sec) * 1000000000UL +
-  static_cast<uint64_t>(ts_end.tv_nsec) -
-  static_cast<uint64_t>(ts_start.tv_sec) * 1000000000UL +
-  static_cast<uint64_t>(ts_start.tv_nsec);
-  printf("Range Filter created, elapsed %.3f, #keys %d\n", (static_cast<double>(elapsed) / 1000000000.), key_cnts);
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    elapsed = static_cast<uint64_t>(ts_end.tv_sec) * 1000000000UL +
+    static_cast<uint64_t>(ts_end.tv_nsec) -
+    static_cast<uint64_t>(ts_start.tv_sec) * 1000000000UL +
+    static_cast<uint64_t>(ts_start.tv_nsec);
+    printf("Range Filter loaded from file, elapsed %.3f\n", (static_cast<double>(elapsed) / 1000000000.));
+  }
+  else {
+    const ReadOptions options;
+    int key_cnts = 0;
+    IDXIterator *it_ = key_idx_[0]->NewIterator(options);
+    it_->SeekToFirst();
+    while(it_->Valid()) {
+      rf_->InsertItem(it_->key());
+      it_->Next();
+      key_cnts++;
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    elapsed = static_cast<uint64_t>(ts_end.tv_sec) * 1000000000UL +
+    static_cast<uint64_t>(ts_end.tv_nsec) -
+    static_cast<uint64_t>(ts_start.tv_sec) * 1000000000UL +
+    static_cast<uint64_t>(ts_start.tv_nsec);
+    printf("Range Filter created, elapsed %.3f, #keys %d\n", (static_cast<double>(elapsed) / 1000000000.), key_cnts);
+  }
 }
 
 Status DB::Open(const Options& options, const std::string& dbname,

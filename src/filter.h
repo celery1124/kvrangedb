@@ -5,6 +5,8 @@
 #ifndef _filter_h_
 #define _filter_h_
 
+#include <fstream>
+#include <iostream>
 #include <strings.h>
 #include "kvrangedb/slice.h"
 #include "hash.h"
@@ -89,6 +91,9 @@ class RangeFilter {
   RangeFilter() {};
   virtual ~RangeFilter() {};
 
+  virtual std::string GenFilterName() = 0;
+  virtual void LoadFilter(std::string filename) = 0;
+  virtual void SaveFilter(std::string filename) = 0;
   virtual void InsertItem(const Slice& key) = 0;
   virtual bool KeyMayMatch(const Slice& key) = 0;
   virtual bool RangeMayMatch(const Slice& lkey, const Slice& hkey) = 0;
