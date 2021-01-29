@@ -125,6 +125,7 @@ DBImpl::~DBImpl() {
     if(!f.good()) {
       rf_->SaveFilter(filter_name);
     }
+    printf("Save range filter as %s", filter_name.c_str());
   }
 
 
