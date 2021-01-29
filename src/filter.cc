@@ -39,7 +39,7 @@ class HiBloomFilter : public RangeFilter {
       bf_[i].push_back(static_cast<char>(k_[i]));
       filter_bytes += (bits_[i]/8+1);
     }
-    printf("HiBloomFilter #keys: %d size: %.3f MB\n", num_keys, (double)filter_bytes/1024/1024);
+    printf("HiBloomFilter (%d levels, %d bits per level) #keys: %d size: %.3f MB\n",levels, bits_per_level, num_keys, (double)filter_bytes/1024/1024);
   }
 
   ~HiBloomFilter() {
