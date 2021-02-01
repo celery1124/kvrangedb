@@ -59,10 +59,8 @@ class HiBloomFilter : public RangeFilter {
       std::ifstream filterFile;
       std::string fn = filename+"_"+std::to_string(i);
       filterFile.open (fn.c_str(), std::ios::in | std::ios::binary);
-      std::string tmp;
-      filterFile >> tmp;
-      assert(tmp.size() == bf_[i].size());
-      memcpy((void*)bf_[i].data(), tmp.data(), tmp.size());
+      filterFile.read ((char *)bf_[i].data(), bf_[i].size());
+
       filterFile.close();
     }
   }
@@ -178,7 +176,7 @@ class HiBloomFilter : public RangeFilter {
 
  bool KeyMayMatchLevel(const Slice& key, int l)  {
     const size_t len = bf_[l].size();
-    //printf("Check Bloom filter level %d (%d), key %llX\n",l, len, *(uint64_t *)key.data());
+    // printf("Check Bloom filter level %d (%d), key %llX\n",l, len, *(uint64_t *)key.data());
     if (len < 2) return false;
 
     const char* array = bf_[l].data();
@@ -278,10 +276,7 @@ class RBloomFilter : public RangeFilter {
   void LoadFilter(std::string filename) {
     std::ifstream filterFile;
     filterFile.open (filename.c_str(), std::ios::in | std::ios::binary);
-    std::string tmp;
-    filterFile >> tmp;
-    assert(tmp.size() == bf_.size());
-    memcpy((void*)bf_.data(), tmp.data(), tmp.size());
+    filterFile.read ((char *)bf_.data(), bf_.size());
     filterFile.close();
   }
 
