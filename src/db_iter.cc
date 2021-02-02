@@ -541,7 +541,13 @@ void DBIterator::Next() {
   }
   else {
     it_->Next();
-    valid_ = it_->Valid();
+    // valid_ = it_->Valid();
+    if (upper_key_.size() > 0) { // upper key specified
+      valid_ = (it_->Valid() && db_->options_.comparator->Compare(it_->key(), upper_key_) < 0);
+    }
+    else {
+      valid_ = it_->Valid();
+    }
   }
   
 }
