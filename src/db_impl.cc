@@ -88,7 +88,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 
   // initialize in-memory data cache
   if (options.dataCacheSize > 0)
-    cache_ = NewLRUCache(options.dataCacheSize << 20, 0);
+    cache_ = NewLRUCache((size_t)options.dataCacheSize << 20, 0);
   else 
     cache_ = NewLRUCache(1<<20, 0); // minimum in-memory cache (1MB) for get consistance
 
@@ -454,7 +454,7 @@ Status DBImpl::Get(const ReadOptions& options,
     return Status().NotFound(Slice()); 
   }
   RecordTick(options_.statistics.get(), FILTER_POINT_POSITIVE);
-
+  
   // read in-memory cache
   std::string skey(key.data(), key.size());
   Cache::Handle *h = read_cache(skey, value);
@@ -517,7 +517,6 @@ Status DBImpl::Get(const ReadOptions& options,
     if (ret == 0) {
       value->append(vbuf, vlen);
       free(vbuf);
-
       // insert to in-memory cache
       const Slice val(value->data(), value->size());
       h = insert_cache(skey, val);
