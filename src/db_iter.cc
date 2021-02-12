@@ -12,6 +12,7 @@
 #include "db_iter.h"
 #include "kvssd/kvssd.h"
 #include <thread>
+#include <atomic>
 
 #include <ctime>
 #include <chrono>
@@ -25,21 +26,19 @@ namespace kvrangedb {
 
 std::unordered_map<std::string, int> scan_queryKey_;
 
-typedef struct {
-  std::mutex *m;
-  int prefetch_cnt;
+class Prefetch_context{
+public:
+  std::atomic<int> prefetch_cnt;
   int prefetch_num;
   Monitor *mon;
-} Prefetch_context;
+  Prefetch_context (int prefetch_num_, Monitor *mon_) : prefetch_cnt(0), prefetch_num(prefetch_num_), mon(mon_) {}
+} ;
 
 void on_prefetch_complete(void* args) {
   Prefetch_context *prefetch_ctx = (Prefetch_context *)args;
-  std::mutex *m = prefetch_ctx->m;
-  {
-    std::unique_lock<std::mutex> lck(*m);
-    if (prefetch_ctx->prefetch_cnt++ == prefetch_ctx->prefetch_num-1)
-      prefetch_ctx->mon->notify();
-  }
+  if (prefetch_ctx->prefetch_cnt.fetch_add(1) == prefetch_ctx->prefetch_num-1)
+    prefetch_ctx->mon->notify();
+
 }
 
 class MergeIterator : public Iterator {
@@ -296,8 +295,7 @@ void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>
   char **vbuf_list = new char*[prefetch_num];
   uint32_t *actual_vlen_list = new uint32_t[prefetch_num];
   Monitor mon;
-  std::mutex m;
-  Prefetch_context *ctx = new Prefetch_context {&m, 0, prefetch_num, &mon};
+  Prefetch_context *ctx = new Prefetch_context (prefetch_num, &mon);
 
   std::vector<kvssd::Slice> prefetch_key_list;
   for (int i = 0 ; i < prefetch_num; i++) {
