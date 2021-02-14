@@ -76,16 +76,23 @@ public:
   std::atomic_ullong tickers_[TICKER_ENUM_MAX] = {{0}};
   std::thread *report_;
   pthread_t  report_tt_;
+  int interval_;
 public:
-  Statistics(int interval) {
-    report_ = new std::thread(&Statistics::ReportStats, this, interval);
-    report_tt_ = report_->native_handle();
-    report_->detach();
-  }
+  Statistics() : interval_(-1) {}
   ~Statistics() {
-    pthread_cancel(report_tt_);
-    reportStats();
-    delete report_;
+    if (interval_ > 0) {
+      pthread_cancel(report_tt_);
+      reportStats();
+      delete report_;
+    }
+  }
+  void setStatsDump(int interval) {
+    interval_ = interval;
+    if (interval > 0) {
+      report_ = new std::thread(&Statistics::ReportStats, this, interval);
+      report_tt_ = report_->native_handle();
+      report_->detach();
+    }
   }
 
   void recordTick(uint32_t tickType, uint64_t count = 1) {

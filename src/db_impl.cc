@@ -74,6 +74,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
       exit(-1);
     }
   } 
+  // setup stats dump
+  options_.statistics.get()->setStatsDump(options_.stats_dump_interval);
   // load meta
   load_meta(sequence_);
   pack_threads_ = new std::thread*[pack_threads_num];

@@ -167,6 +167,10 @@ struct Options {
   // Default: NULL
   std::shared_ptr<Statistics> statistics;
 
+  // Statistic dump interval in seconds
+  // Default: -1 (no dump)
+  int stats_dump_interval;
+
   Options() : comparator(BytewiseComparator()),
               indexType(LSM),
               cleanIndex(false),
@@ -196,7 +200,8 @@ struct Options {
               rfExamBits(16),
               rfLevels(1),
               rfBitsPerLevel(1),
-              statistics(nullptr) {
+              statistics(nullptr),
+              stats_dump_interval(-1) {
     // Load from environment variable
     char *env_p;
     if(env_p = std::getenv("INDEX_TYPE")) {
@@ -267,7 +272,7 @@ struct Options {
   };
   static std::shared_ptr<Statistics> CreateDBStatistics() {
     printf("KVRangeDB Statistics Created\n");
-    return std::make_shared<Statistics>(120);
+    return std::make_shared<Statistics>();
   } 
 };
 
