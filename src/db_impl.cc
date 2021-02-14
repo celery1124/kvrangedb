@@ -14,11 +14,12 @@
 #include "db_iter.h"
 #include "hash.h"
 
-extern int hitCnt;
-extern double hitCost;
-extern double missCost;
-extern double hitNextCost;
-extern double missNextCost;
+// meant to measure the benefit of Hot query acceleration
+// extern int hitCnt;
+// extern double hitCost;
+// extern double missCost;
+// extern double hitNextCost;
+// extern double missNextCost;
 namespace kvrangedb {
 
 // WriteBatch definition
@@ -47,7 +48,8 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 : options_(options),
   sequence_(0),
   pack_threads_num(options.packThreadsNum),
-  hot_keys_training_cnt_(0) {
+  hot_keys_training_cnt_(0),
+  inflight_io_count_(0) {
   kvd_ = new kvssd::KVSSD(dbname.c_str(), options_.statistics.get());
   for (int i = 0; i < options.indexNum; i++) {
     std::string indexName = std::to_string(i);
@@ -166,9 +168,9 @@ DBImpl::~DBImpl() {
   for (int i = 0; i < options_.indexNum; i++)
     delete key_idx_[i];
 	delete kvd_;
-  printf("hitCnt = %d\n", hitCnt);
-  printf("hitCost = %.3f, missCost = %.3f\n", hitCost, missCost);
-  printf("hitNextCost = %.3f, missNextCost = %.3f\n", hitNextCost, missNextCost);
+  // printf("hitCnt = %d\n", hitCnt);
+  // printf("hitCost = %.3f, missCost = %.3f\n", hitCost, missCost);
+  // printf("hitNextCost = %.3f, missNextCost = %.3f\n", hitNextCost, missNextCost);
 }
 
 // bulk dequeue, either dequeue max_size or wait for time out

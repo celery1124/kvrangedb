@@ -76,8 +76,12 @@ struct Options {
   bool prefetchEnabled;
 
   // Prefetch buffer size
-  // Default: 128
+  // Default: 64
   int prefetchDepth;
+
+  // Prefetch total request threshold
+  // Default: 128
+  int prefetchReqThres;
 
   // Whether enable range filter for LSM index
   // Default: false
@@ -177,7 +181,8 @@ struct Options {
               indexNum(1),
               indexCacheSize(128),
               prefetchEnabled(false),
-              prefetchDepth(128),
+              prefetchDepth(64),
+              prefetchReqThres(128),
               rangefilterEnabled(false),
               helperHint(0),
               helperTrainingThres(10),

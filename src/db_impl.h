@@ -123,6 +123,9 @@ private:
   // Range filter
   RangeFilter *rf_;
 
+  // I/O request conter (read only for now)
+  std::atomic<int64_t> inflight_io_count_;
+
   void processQ(int id);
   void save_meta() {
     std::string meta;

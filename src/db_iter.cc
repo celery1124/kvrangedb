@@ -17,11 +17,12 @@
 #include <ctime>
 #include <chrono>
 
-int hitCnt = 0;
-double hitCost = 0;
-double missCost = 0;
-double hitNextCost = 0;
-double missNextCost = 0;
+// // meant to measure the benefit of Hot query acceleration
+// int hitCnt = 0;
+// double hitCost = 0;
+// double missCost = 0;
+// double hitNextCost = 0;
+// double missNextCost = 0;
 namespace kvrangedb {
 
 std::unordered_map<std::string, int> scan_queryKey_;
@@ -171,6 +172,7 @@ private:
   Slice upper_key_;
 
   // for value prefetch
+  bool prefetch_ena_;
   std::string *key_queue_;
   std::string *pkey_queue_;
   Slice *val_queue_;
@@ -193,11 +195,14 @@ DBIterator::DBIterator(DBImpl *db, const ReadOptions &options)
 : db_(db), options_(options), kvd_(db->GetKVSSD()), valid_(false),
   prefetch_depth_(options.scan_length + 1), queue_cur_(0), 
   isPacked_(false), packedIdx_(0) {
-  
+  // whether to prefetch?
+  prefetch_ena_ = db_->options_.prefetchEnabled && 
+  (db_->inflight_io_count_.load(std::memory_order_relaxed) < db_->options_.prefetchReqThres);
+
   if (options_.upper_key != NULL) {
     upper_key_ = *(options_.upper_key);
   }
-  if (db_->options_.prefetchEnabled) {
+  if (prefetch_ena_) {
     int prefetch_depth = db_->options_.prefetchDepth;
     key_queue_ = new std::string[prefetch_depth];
     pkey_queue_ = new std::string[prefetch_depth];
@@ -225,7 +230,7 @@ DBIterator::~DBIterator() {
   }
   delete it_; 
 
-  if (db_->options_.prefetchEnabled) {
+  if (prefetch_ena_) {
     delete [] key_queue_;
     delete [] pkey_queue_;
     for (int i = 0 ; i < db_->options_.prefetchDepth; i++) {
@@ -328,7 +333,7 @@ void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>
 
 void DBIterator::SeekToFirst() { 
   it_->SeekToFirst();
-  if (db_->options_.prefetchEnabled) {
+  if (prefetch_ena_) {
     valid_ = valid_queue_[0] = it_->Valid();
     if (it_->Valid())
       key_queue_[0] = it_->key().ToString();
@@ -379,16 +384,16 @@ void DBIterator::Seek(const Slice& target) {
       packedKVs_.append(vbuf+sizeof(int), vlen-sizeof(int));
       isPacked_ = true;
       valid_ = true;
-      hitCnt++;
+      // hitCnt++;
       free(vbuf);
-      std::chrono::duration<double, std::micro> hitduration = (std::chrono::system_clock::now() - wcts);
-      hitCost += hitduration.count();
+      // std::chrono::duration<double, std::micro> hitduration = (std::chrono::system_clock::now() - wcts);
+      // hitCost += hitduration.count();
       return;
     }
   }
   // none phase
   it_->Seek(target); 
-  if (db_->options_.prefetchEnabled) {
+  if (prefetch_ena_) {
     if (upper_key_.size() > 0) { // upper key specified
       valid_ = valid_queue_[0] = (it_->Valid() && db_->options_.comparator->Compare(it_->key(), upper_key_) < 0);
     }
@@ -443,8 +448,8 @@ void DBIterator::Seek(const Slice& target) {
     }
   }
   
-  std::chrono::duration<double, std::micro> missduration = (std::chrono::system_clock::now() - wcts);
-  missCost += missduration.count();
+  // std::chrono::duration<double, std::micro> missduration = (std::chrono::system_clock::now() - wcts);
+  // missCost += missduration.count();
 }
 
 void DBIterator::Prev() { /* NOT FULLY IMPLEMENT, Suppose ONLY CALL BEFORE next */ 
@@ -455,7 +460,7 @@ void DBIterator::Prev() { /* NOT FULLY IMPLEMENT, Suppose ONLY CALL BEFORE next 
     it_->Prev();
   } while (it_->Valid() && db_->options_.comparator->Compare(it_->key(), curr_key) >= 0);
   valid_ = it_->Valid();
-  if (valid_ && db_->options_.prefetchEnabled) {
+  if (valid_ && prefetch_ena_) {
     key_queue_[0] = it_->key().ToString();
     pkey_queue_[0] = it_->value().ToString();
   }
@@ -481,10 +486,10 @@ void DBIterator::Next() {
     packedIdx_ += sizeof(int);
     isPackedCurrVal_ = Slice(&packedKVs_[packedIdx_], vlen);
     packedIdx_ += vlen;
-    std::chrono::duration<double, std::micro> duration = (std::chrono::system_clock::now() - wcts);
-    hitNextCost += duration.count();
+    // std::chrono::duration<double, std::micro> duration = (std::chrono::system_clock::now() - wcts);
+    // hitNextCost += duration.count();
   }
-  else if (db_->options_.prefetchEnabled) {
+  else if (prefetch_ena_) {
     if (queue_cur_ == prefetch_depth_-1) {
       queue_cur_ = 0; //reset cursor
       // release allocated memory vbuf
@@ -534,8 +539,8 @@ void DBIterator::Next() {
       queue_cur_++;
     
     valid_ = valid_queue_[queue_cur_];
-    std::chrono::duration<double, std::micro> duration = (std::chrono::system_clock::now() - wcts);
-    missNextCost += duration.count();
+    // std::chrono::duration<double, std::micro> duration = (std::chrono::system_clock::now() - wcts);
+    // missNextCost += duration.count();
   }
   else {
     it_->Next();
@@ -555,7 +560,7 @@ Slice DBIterator::key() const {
   if (isPacked_) {
     return isPackedCurrKey_;
   }
-  else if (db_->options_.prefetchEnabled)
+  else if (prefetch_ena_)
     return Slice(key_queue_[queue_cur_]);
   else
     return it_->key();
@@ -567,7 +572,7 @@ Slice DBIterator::value() {
   if (isPacked_) {
     return isPackedCurrVal_;
   }
-  else if (db_->options_.prefetchEnabled) {
+  else if (prefetch_ena_) {
     if (queue_cur_ == 0) {// do prefetch_value
       std::vector<Slice> key_list;
       std::vector<Slice> lkey_list;
