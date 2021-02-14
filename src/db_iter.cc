@@ -303,6 +303,7 @@ void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>
   Prefetch_context *ctx = new Prefetch_context (prefetch_num, &mon);
 
   std::vector<kvssd::Slice> prefetch_key_list;
+  db_->inflight_io_count_.fetch_add(prefetch_num, std::memory_order_relaxed);
   for (int i = 0 ; i < prefetch_num; i++) {
     prefetch_key_list.push_back(kvssd::Slice(key_list[i].data(), key_list[i].size()));
     //kvssd::Async_get_context *io_ctx = new kvssd::Async_get_context {vbuf_list[i], actual_vlen_list[i], (void *)ctx};
@@ -311,6 +312,7 @@ void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>
   }
 
   mon.wait();
+  db_->inflight_io_count_.fetch_sub(prefetch_num, std::memory_order_relaxed);
   // save the vbuf
   for (int i = 0; i < prefetch_num; i++) {
     if (lkey_list[i].size() == 0)
