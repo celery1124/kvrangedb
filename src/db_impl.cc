@@ -254,6 +254,7 @@ static bool do_unpack_KVs (char *vbuf, int size, const Slice& lkey, std::string*
 void DBImpl::processQ(int id) {
   bool shutdown = false;
   bool ready_to_shutdown = false;
+  int sleep_cnt = 0;
   while (true && (!shutdown)) {
     // check thread shutdown
     {
@@ -264,6 +265,7 @@ void DBImpl::processQ(int id) {
     }
 
     if (ready_to_shutdown) {
+      sleep_cnt++;
       sleep(1); // wait all enqueue done
     }
     
@@ -324,7 +326,7 @@ void DBImpl::processQ(int id) {
       pack_q_wait_.notifyAll();
     }
     else { // check shutdown
-        if (ready_to_shutdown && pack_q_.size_approx() == 0) {
+        if (ready_to_shutdown && (pack_q_.size_approx() == 0||sleep_cnt>=16)) { // in case size_approx not zero
             shutdown = true;
             break;
         }
