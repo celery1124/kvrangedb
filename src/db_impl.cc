@@ -80,15 +80,20 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   options_.statistics.get()->setStatsDump(options_.stats_dump_interval);
   // load meta
   load_meta(sequence_);
-  pack_threads_ = new std::thread*[pack_threads_num];
-  thread_m_ = new std::mutex[pack_threads_num];
-  shutdown_ = new bool[pack_threads_num];
-  for (int i = 0; i < pack_threads_num; i++) {
-    shutdown_[i] = false;
-    pack_threads_[i] = new std::thread(&DBImpl::processQ, this, i);
-    printf("Initiated worker thread %d\n", i);
+
+  if (!options_.packThreadsDisable) {
+    pack_threads_ = new std::thread*[pack_threads_num];
+    thread_m_ = new std::mutex[pack_threads_num];
+    shutdown_ = new bool[pack_threads_num];
+    for (int i = 0; i < pack_threads_num; i++) {
+      shutdown_[i] = false;
+      pack_threads_[i] = new std::thread(&DBImpl::processQ, this, i);
+      printf("Initiated worker thread %d\n", i);
+    }
+    printf("Max Pack Size: %d\n", options_.packSize);
+  } else {
+    printf("Background packing threads disabled\n");
   }
-  printf("Max Pack Size: %d\n", options_.packSize);
 
   // initialize in-memory data cache
   if (options.dataCacheSize > 0)
@@ -144,22 +149,24 @@ DBImpl::~DBImpl() {
   }
 
   // shutdown packing threads
-  for (int i = 0; i < pack_threads_num; i++) { 
-      {
-          std::unique_lock<std::mutex> lck (thread_m_[i]);
-          shutdown_[i] = true;
-      }
-  }
+  if (!options_.packThreadsDisable) {
+    for (int i = 0; i < pack_threads_num; i++) { 
+        {
+            std::unique_lock<std::mutex> lck (thread_m_[i]);
+            shutdown_[i] = true;
+        }
+    }
 
-  for (int i = 0; i < pack_threads_num; i++) { 
-      pack_threads_[i]->join();
-      delete pack_threads_[i];
-      printf("Shutdown worker thread %d\n", i);
-  }
+    for (int i = 0; i < pack_threads_num; i++) { 
+        pack_threads_[i]->join();
+        delete pack_threads_[i];
+        printf("Shutdown worker thread %d\n", i);
+    }
 
-  delete [] pack_threads_;
-  delete [] thread_m_;
-  delete [] shutdown_;
+    delete [] pack_threads_;
+    delete [] thread_m_;
+    delete [] shutdown_;
+  }
 
   // save meta (sequence number)
   save_meta();

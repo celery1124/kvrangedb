@@ -115,6 +115,10 @@ struct Options {
   // Default: 8
   int packThreadsNum;
 
+  // Disable BG packing threads
+  // Default: false
+  bool packThreadsDisable;
+
   // Manual compaction
   // Default: false
   bool manualCompaction;
@@ -192,6 +196,7 @@ struct Options {
               packDequeueTimeout(5000),
               packQueueDepth(1024),
               packThreadsNum(8),
+              packThreadsDisable(false),
               manualCompaction(false),
               bgCompaction(false),
               bgCompactionInterval(10),
