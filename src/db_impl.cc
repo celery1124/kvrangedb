@@ -357,7 +357,7 @@ Status DBImpl::Put(const WriteOptions& options,
   release_cache(h);
 
   // smaller values
-  if (value.size() < options_.packThres) {
+  if (value.size() < options_.packThres && (!options_.packThreadsDisable)) {
     int size = get_phyKV_size(key, value);
     packKVEntry *item = new packKVEntry(size, key, value);
     while (pack_q_.size_approx() > options_.packQueueDepth) {
