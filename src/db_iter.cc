@@ -307,7 +307,7 @@ void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>
   for (int i = 0 ; i < prefetch_num; i++) {
     prefetch_key_list.push_back(kvssd::Slice(key_list[i].data(), key_list[i].size()));
     //kvssd::Async_get_context *io_ctx = new kvssd::Async_get_context {vbuf_list[i], actual_vlen_list[i], (void *)ctx};
-    kvssd::Async_get_context *io_ctx = new kvssd::Async_get_context (vbuf_list[i], actual_vlen_list[i], (void *)ctx);
+    kvssd::Async_get_context *io_ctx = new kvssd::Async_get_context (kvd_, vbuf_list[i], actual_vlen_list[i], (void *)ctx);
     kvd_->kv_get_async(&prefetch_key_list[i], on_prefetch_complete, (void*) io_ctx);
   }
 

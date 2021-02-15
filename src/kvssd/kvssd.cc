@@ -27,8 +27,10 @@ namespace kvssd {
     case IOCB_ASYNC_GET_CMD : {
       void (*callback_get) (void *) = (void (*)(void *))ioctx->private1;
       Async_get_context *args_get = (Async_get_context *)ioctx->private2;
+      KVSSD *kvd = args_get->dev;
       args_get->vbuf = (char*) ioctx->value->value;
       args_get->actual_len = ioctx->value->actual_value_size;
+      RecordTick(kvd->statistics, IO_GET_BYTES, args_get->actual_len);
       if (callback_get != NULL) {
         callback_get((void *)args_get->args);
       }
@@ -100,6 +102,7 @@ namespace kvssd {
     }
 
     RecordTick(statistics, IO_PUT);
+    RecordTick(statistics, IO_PUT_BYTES, val->size());
     // stats_.num_store.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_store] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
     return ret;
@@ -126,6 +129,7 @@ namespace kvssd {
     }
 
     RecordTick(statistics, IO_PUT);
+    RecordTick(statistics, IO_PUT_BYTES, val->size());
     // stats_.num_store.fetch_add(1, std::memory_order_relaxed);
     return ret;
   }
@@ -205,6 +209,7 @@ namespace kvssd {
     free(vbuf); // release buffer from kv_get
 
     RecordTick(statistics, IO_APPEND);
+    RecordTick(statistics, IO_APP_BYTES, val->size());
     // stats_.num_append.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_append] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
     return ret;
@@ -273,11 +278,12 @@ namespace kvssd {
     io_ctx->cb = callback;
     io_ctx->args = args;
 
-    Async_get_context *get_ctx = new Async_get_context(io_ctx->vbuf, io_ctx->vbuf_size, io_ctx);
+    Async_get_context *get_ctx = new Async_get_context(this, io_ctx->vbuf, io_ctx->vbuf_size, io_ctx);
 
     return kv_get_async(key, kv_append_async_callback, get_ctx);
 
     RecordTick(statistics, IO_APPEND);
+    RecordTick(statistics, IO_APP_BYTES, val->size());
     // stats_.num_append.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -312,6 +318,7 @@ namespace kvssd {
     }
     //if (ret == KVS_ERR_BUFFER_SMALL) { // do anther IO KVS_ERR_BUFFER_SMALL not working
     vlen = kvsvalue.actual_value_size;
+    RecordTick(statistics, IO_GET_BYTES, vlen);
     if (init_size < vlen) {
       // implement own aligned_realloc
       int realloc_buf_size = (vlen + 4 - (vlen%4)) > (2<<20) ? (2<<20) : (vlen + 4 - (vlen%4));
@@ -324,6 +331,7 @@ namespace kvssd {
       ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
 
       RecordTick(statistics, IO_GET);
+      RecordTick(statistics, IO_GET_BYTES, realloc_buf_size);
       // stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
       
     }

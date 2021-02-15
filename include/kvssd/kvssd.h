@@ -24,13 +24,15 @@ namespace kvssd {
       std::atomic<uint32_t> num_retrieve{0};
       std::atomic<uint32_t> num_delete{0};
   } kvd_stats;
-
+  
+  class KVSSD;
   struct Async_get_context {
+    KVSSD *dev;
     char*& vbuf;
     uint32_t& actual_len;
     void* args;
-    Async_get_context(char *&_buf, uint32_t &_len, void *_args)
-    : vbuf(_buf), actual_len(_len), args(_args) {};
+    Async_get_context(KVSSD *_dev, char *&_buf, uint32_t &_len, void *_args)
+    : dev(_dev), vbuf(_buf), actual_len(_len), args(_args) {};
   } ;
 
   class KVSSD {
@@ -40,11 +42,11 @@ namespace kvssd {
       kvs_device_handle dev;
       kvs_container_context ctx;
       kvs_container_handle cont_handle;
-      Statistics *statistics;
-      // kvd_stats stats_;
 
       friend class kv_iter;
     public:
+      Statistics *statistics;
+      // kvd_stats stats_;
       KVSSD(const char* dev_path, Statistics *stats) : statistics(stats) {
         memset(kvs_dev_path, 0, 32);
         memcpy(kvs_dev_path, dev_path, strlen(dev_path));

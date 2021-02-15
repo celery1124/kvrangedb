@@ -746,7 +746,7 @@ void DBImpl::ManualCompaction() {
     uint32_t *actual_vlen_list_unpack = new uint32_t[unpack_fetch_num];
     Compaction_context *ctx_unpack = new Compaction_context {&m_unpack, 0, unpack_fetch_num, &mon_unpack_keys};
     for (int i = 0; i < unpack_fetch_num; i++) {
-      kvssd::Async_get_context *io_ctx = new kvssd::Async_get_context (vbuf_list_unpack[i], actual_vlen_list_unpack[i], (void *)ctx_unpack);
+      kvssd::Async_get_context *io_ctx = new kvssd::Async_get_context (kvd_, vbuf_list_unpack[i], actual_vlen_list_unpack[i], (void *)ctx_unpack);
       kvd_->kv_get_async(&unpack_fetch_key_list[i], on_compact_get_complete, (void*) io_ctx);
     }
     
@@ -757,7 +757,7 @@ void DBImpl::ManualCompaction() {
     uint32_t *actual_vlen_list = new uint32_t[fetch_num];
     Compaction_context *ctx_pack = new Compaction_context {&m_pack, 0, fetch_num, &mon_pack_keys};
     for (int i = 0; i < fetch_num; i++) {
-      kvssd::Async_get_context *io_ctx = new kvssd::Async_get_context (vbuf_list[i], actual_vlen_list[i], (void *)ctx_pack);
+      kvssd::Async_get_context *io_ctx = new kvssd::Async_get_context (kvd_, vbuf_list[i], actual_vlen_list[i], (void *)ctx_pack);
       kvd_->kv_get_async(&pack_fetch_key_list[i], on_compact_get_complete, (void*) io_ctx);
     }
 
