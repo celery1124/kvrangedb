@@ -85,6 +85,8 @@ public:
       reportStats();
       delete report_;
     }
+    else 
+      reportStats();
   }
   void setStatsDump(int interval) {
     interval_ = interval;
