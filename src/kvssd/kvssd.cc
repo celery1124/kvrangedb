@@ -314,6 +314,7 @@ namespace kvssd {
     const kvs_retrieve_context ret_ctx = {option, 0, 0};
     kvs_result ret = kvs_retrieve_tuple(cont_handle, &kvskey, &kvsvalue, &ret_ctx);
     if(ret == KVS_ERR_KEY_NOT_EXIST) {
+      RecordTick(statistics, IO_GET_NONE);
       return ret;
     }
     //if (ret == KVS_ERR_BUFFER_SMALL) { // do anther IO KVS_ERR_BUFFER_SMALL not working

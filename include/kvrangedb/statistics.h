@@ -28,6 +28,7 @@ enum Tickers : uint32_t {
   // I/O
   IO_PUT,
   IO_GET,
+  IO_GET_NONE,
   IO_DEL,
   IO_APPEND,
   IO_PUT_BYTES,
@@ -58,6 +59,7 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {REQ_NEXT, "req.next"},
     {IO_PUT, "io.put"},
     {IO_GET, "io.get"},
+    {IO_GET_NONE, "io.get.non-exist"},
     {IO_DEL, "io.delete"},
     {IO_APPEND, "io.append"},
     {IO_PUT_BYTES, "io.put.bytes"},
