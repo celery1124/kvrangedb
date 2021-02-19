@@ -193,8 +193,9 @@ private:
 
 DBIterator::DBIterator(DBImpl *db, const ReadOptions &options) 
 : db_(db), options_(options), kvd_(db->GetKVSSD()), valid_(false),
-  prefetch_depth_(options.scan_length + 1), queue_cur_(0), 
-  isPacked_(false), packedIdx_(0) {
+  queue_cur_(0), isPacked_(false), packedIdx_(0) {
+  
+  prefetch_depth_ = (options.scan_length + 1 >= db_->options_.prefetchDepth) ? db->options_.prefetchDepth : options.scan_length + 1;
   // whether to prefetch?
   prefetch_ena_ = db_->options_.prefetchEnabled && 
   (db_->inflight_io_count_.load(std::memory_order_relaxed) < db_->options_.prefetchReqThres);
