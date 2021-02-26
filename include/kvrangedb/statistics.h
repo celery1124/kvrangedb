@@ -115,7 +115,7 @@ public:
   }
 
   void Reset() {
-    for (int tick; tick < TICKER_ENUM_MAX; tick++)
+    for (uint32_t tick; tick < TICKER_ENUM_MAX; tick++)
       tickers_[tick].store(0, std::memory_order_seq_cst);
   }
 
@@ -129,7 +129,7 @@ public:
     strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
 
     fprintf(stderr, "[%s] ", buffer);
-    for(int i = 0; i < TickersNameMap.size(); i++) {
+    for(uint32_t i = 0; i < TickersNameMap.size(); i++) {
       fprintf(stderr, "\t%s: %lu", TickersNameMap[i].second.c_str(), getTickCount(i));
       if ((i+1)%6 == 0) fprintf(stderr, "\n\t\t");
     }
