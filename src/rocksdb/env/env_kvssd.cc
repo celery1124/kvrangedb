@@ -282,7 +282,7 @@ class KVAppendableFileOpt : public WritableFile {
     char *p = &value_[0];
     int write_bytes = 0;
     int kv_cnt = 0;
-    while(write_bytes < value_.size()) {
+    while(write_bytes < (int)value_.size()) {
       int vlen = value_.size() - write_bytes > MAX_V_SIZE ? MAX_V_SIZE : value_.size() - write_bytes;
       std::string key_str = filename_+"_"+std::to_string(kv_cnt++);
       kvssd::Slice key(key_str);
