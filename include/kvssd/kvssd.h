@@ -68,6 +68,7 @@ namespace kvssd {
         }
       }
       ~KVSSD() {
+        RecordTick(statistics, DEV_UTIL, get_util());
         kvs_close_container(cont_handle);
         kvs_close_device(dev);
         // FILE *fd = fopen("kv_device.log","w");
@@ -89,6 +90,12 @@ namespace kvssd {
       kvs_result kv_delete_async(const Slice *key, void (*callback)(void *), void *args);
 
       kvs_result kv_scan_keys(std::vector<std::string> &keys, int buf_size = 32768);
+
+      int get_util() {
+        int dev_util;
+        kvs_get_device_utilization(dev, &dev_util);
+        return dev_util;
+      }
 
       class kv_iter {
       public:

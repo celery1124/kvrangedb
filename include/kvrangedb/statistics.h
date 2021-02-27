@@ -34,6 +34,7 @@ enum Tickers : uint32_t {
   IO_PUT_BYTES,
   IO_GET_BYTES,
   IO_APP_BYTES,
+  DEV_UTIL,
   // Cache
   CACHE_HIT,
   CACHE_MISS,
@@ -65,6 +66,7 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {IO_PUT_BYTES, "io.put.bytes"},
     {IO_GET_BYTES, "io.get.bytes"},
     {IO_APP_BYTES, "io.append.bytes"},
+    {DEV_UTIL, "dev.util"},
     {CACHE_HIT, "cache.hit"},
     {CACHE_MISS, "cache.miss"},
     {CACHE_FILL, "cache.fill"},
