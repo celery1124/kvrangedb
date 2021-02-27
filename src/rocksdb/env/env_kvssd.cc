@@ -272,29 +272,32 @@ class KVAppendableFileOpt : public WritableFile {
   virtual Status Sync() {
     // Ensure new files referred to by the manifest are in the filesystem.
     //Status s = SyncDirIfManifest();
-    // kvssd::Slice key (filename_);
-    // kvssd::Slice val (value_);
+    
 #ifdef IO_DBG
     printf("[env_appendable]: %s (%d)\n",filename_.c_str(), (int)value_.size());
 #endif
-    // manifest can be exceed 2MB (max value size)
-    const int MAX_V_SIZE = 2<<20; // 2MB max value size
-    char *p = &value_[0];
-    int write_bytes = 0;
-    int kv_cnt = 0;
-    while(write_bytes < (int)value_.size()) {
-      int vlen = value_.size() - write_bytes > MAX_V_SIZE ? MAX_V_SIZE : value_.size() - write_bytes;
-      std::string key_str = filename_+"_"+std::to_string(kv_cnt++);
-      kvssd::Slice key(key_str);
-      kvssd::Slice bf_val(p, vlen);
-      kvd_->kv_store(&key, &bf_val);
-      p += vlen;
-      write_bytes += vlen;
+    if (filename_.find("MANIFEST") != std::string::npos) {
+      // manifest can be exceed 2MB (max value size)
+      const int MAX_V_SIZE = 2<<20; // 2MB max value size
+      char *p = &value_[0];
+      int write_bytes = 0;
+      int kv_cnt = 0;
+      while(write_bytes < (int)value_.size()) {
+        int vlen = value_.size() - write_bytes > MAX_V_SIZE ? MAX_V_SIZE : value_.size() - write_bytes;
+        std::string key_str = filename_+"_"+std::to_string(kv_cnt++);
+        kvssd::Slice key(key_str);
+        kvssd::Slice bf_val(p, vlen);
+        kvd_->kv_store(&key, &bf_val);
+        p += vlen;
+        write_bytes += vlen;
+      }
+    }
+    else { // option, log, etc
+      kvssd::Slice key (filename_);
+      kvssd::Slice val (value_);   
+      kvd_->kv_store(&key, &val);
     }
 
-
-    // kvd_->kv_store(&key, &val);
-    //kvd_->kv_append(&key, &val);
     synced = true;
     return Status::OK();
   }
@@ -324,22 +327,29 @@ class KVSSDEnvOpt : public EnvWrapper {
     char *base = NULL;
     int size = 0;
 
-    // read sequential file, may contain multiple kv pairs
-    int kv_cnt = 0;
-    while (true) {
-      std::string key_str = fname+"_"+std::to_string(kv_cnt++);
-      kvssd::Slice key(key_str);
-      int found = kvd_->kv_get(&key, vbuf, vsize); 
-      if (found == 0) {
-        base = (char*) realloc(base, size+vsize);
-        memcpy(base + size, vbuf, vsize);
-        size += vsize;
-        free(vbuf);
-      }
-      else {
-        break;
+    if (fname.find("MANIFEST") != std::string::npos) {
+      // read sequential file, may contain multiple kv pairs
+      int kv_cnt = 0;
+      while (true) {
+        std::string key_str = fname+"_"+std::to_string(kv_cnt++);
+        kvssd::Slice key(key_str);
+        int found = kvd_->kv_get(&key, vbuf, vsize); 
+        if (found == 0) {
+          base = (char*) realloc(base, size+vsize);
+          memcpy(base + size, vbuf, vsize);
+          size += vsize;
+          free(vbuf);
+        }
+        else {
+          break;
+        }
       }
     }
+    else {
+      kvssd::Slice key (fname);	    
+      kvd_->kv_get(&key, base, size);
+    }
+
 
     //*result = new KVSequentialFileOpt (fname, base, size);
     result->reset(new KVSequentialFileOpt(fname, base, size));
