@@ -341,6 +341,7 @@ class KVSSDEnvOpt : public EnvWrapper {
           free(vbuf);
         }
         else {
+          free(vbuf);
           break;
         }
       }
@@ -467,11 +468,29 @@ class KVSSDEnvOpt : public EnvWrapper {
 
   virtual Status GetFileSize(const std::string& fname, uint64_t* file_size) {
     kvssd::Slice key(fname);
-    if (!kvd_->kv_exist(&key)) {
-      return Status::IOError(fname, "KV not found");
-    }
+    if (fname.find("MANIFEST") != std::string::npos) {
+      int kv_cnt = 0;
+      int fsize = 0;
+      while (true) {
+        std::string key_str = fname+"_"+std::to_string(kv_cnt++);
+        kvssd::Slice mkey(key_str);
 
-    *file_size = kvd_->kv_get_size(&key);
+        if (kvd_->kv_exist(&mkey)) {
+          fsize += kvd_->kv_get_size(&mkey);
+        }
+        else {
+          break;
+        }
+      }
+      *file_size = fsize;
+    }
+    else {
+      if (!kvd_->kv_exist(&key)) {
+        return Status::IOError(fname, "KV not found");
+      }
+      *file_size = kvd_->kv_get_size(&key);
+    }
+    
     return Status::OK();
   }
 
