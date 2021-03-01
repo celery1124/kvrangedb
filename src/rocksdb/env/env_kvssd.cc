@@ -439,6 +439,7 @@ class KVSSDEnvOpt : public EnvWrapper {
         kvssd::Slice block_key (block_name);
         kvd_->kv_delete(&block_key);
         p += sizeof(int);
+        if (offset == 0) break;
       }
       kvd_->kv_delete(&meta_key);
 #ifdef IO_DBG
