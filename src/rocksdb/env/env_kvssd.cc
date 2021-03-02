@@ -12,6 +12,7 @@
 #include <vector>
 #include <mutex>
 #include <condition_variable>
+#include <atomic>
 
 // #define IO_DBG
 
@@ -54,6 +55,22 @@ static void kv_store_async_cb (void *args) {
     delete ctx->valStr;
     delete ctx->key;
     delete ctx->val;
+    delete ctx;
+}
+
+struct AsyncDel_context {
+  std::atomic<int> *complete;
+  std::string *keyStr;
+  kvssd::Slice *key;
+  AsyncDel_context(std::atomic<int> *_complete, std::string *_keyStr, kvssd::Slice *_key) :
+  complete(_complete), keyStr(_keyStr), key(_key) {}
+};
+
+static void kv_del_async_cb (void *args) {
+    AsyncDel_context *ctx = (AsyncDel_context *)args;
+    ctx->complete->fetch_add(1);
+    delete ctx->keyStr;
+    delete ctx->key;
     delete ctx;
 }
 
@@ -418,12 +435,15 @@ class KVSSDEnvOpt : public EnvWrapper {
 
   virtual Status DeleteFile(const std::string& fname) {
     if (fname.find("sst") != std::string::npos) {
+      int submitted = 0;
+      std::atomic<int> completed(0);
+
       char *base;
       int size, offset;
       // read meta KV 
-      std::string meta_name = fname+"/meta";
-      kvssd::Slice meta_key (meta_name);
-      int kvd_ret = kvd_->kv_get(&meta_key, base, size, 16<<10 /*16KB*/);
+      std::string *meta_name = new std::string(fname+"/meta");
+        kvssd::Slice *meta_key = new kvssd::Slice (*meta_name);
+      int kvd_ret = kvd_->kv_get(meta_key, base, size, 16<<10 /*16KB*/);
       assert(kvd_ret == 0);
       if (kvd_ret != 0) {
 #ifdef IO_DBG
@@ -435,16 +455,25 @@ class KVSSDEnvOpt : public EnvWrapper {
       char *p = base;
       for (unsigned int i = 0; i < size/sizeof(int) - 1; i++) {
         offset = DecodeFixed32(p);
-        std::string block_name = fname+'/'+std::to_string(offset);
-        kvssd::Slice block_key (block_name);
-        kvd_->kv_delete(&block_key);
+        std::string *block_name = new std::string(fname+'/'+std::to_string(offset));
+        kvssd::Slice *block_key = new kvssd::Slice (*block_name);
+        AsyncDel_context *ctx = new AsyncDel_context(&completed, block_name, block_key);
+        kvd_->kv_delete_async(block_key, kv_del_async_cb, (void*)ctx);
+        submitted++;
         p += sizeof(int);
         if (offset == 0) break;
       }
-      kvd_->kv_delete(&meta_key);
+      AsyncDel_context *ctx = new AsyncDel_context(&completed, meta_name, meta_key);
+      kvd_->kv_delete_async(meta_key, kv_del_async_cb, (void*)ctx);
+      submitted++;
 #ifdef IO_DBG
       printf("[env_delete] %s successed\n", fname.c_str());
 #endif
+      
+      // wait until commands that has succussfully submitted finish
+      while(completed < submitted) {
+        usleep(1);
+      }
       return Status::OK();
     }
     else {
