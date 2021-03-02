@@ -359,7 +359,7 @@ ColumnFamilyData::ColumnFamilyData(
     Cache* _table_cache, WriteBufferManager* write_buffer_manager,
     const ColumnFamilyOptions& cf_options, const ImmutableDBOptions& db_options,
     const EnvOptions& env_options, ColumnFamilySet* column_family_set)
-    : id_(id),
+    : env_(nullptr), id_(id),
       name_(name),
       dummy_versions_(_dummy_versions),
       current_(nullptr),
@@ -644,7 +644,10 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
     bool was_stopped = write_controller->IsStopped();
     bool needed_delay = write_controller->NeedsDelay();
 
-    if (imm()->NumNotFlushed() >= mutable_cf_options.max_write_buffer_number) {
+    if (env_->GetDevUtil() >=0.25) {
+      write_stall_condition = WriteStallCondition::kStopped;
+    }
+    else if (imm()->NumNotFlushed() >= mutable_cf_options.max_write_buffer_number) {
       write_controller_token_ = write_controller->GetStopToken();
       internal_stats_->AddCFStats(InternalStats::MEMTABLE_LIMIT_STOPS, 1);
       write_stall_condition = WriteStallCondition::kStopped;

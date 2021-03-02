@@ -91,11 +91,22 @@ namespace kvssd {
 
       kvs_result kv_scan_keys(std::vector<std::string> &keys, int buf_size = 32768);
 
-      int get_util() {
+      int get_dev_util() {
         int dev_util;
         kvs_get_device_utilization(dev, &dev_util);
         return dev_util;
       }
+
+      int64_t get_capacity() {
+        int64_t dev_cap;
+        kvs_get_device_capacity(dev, &dev_cap);
+        return dev_cap;
+      }
+
+      double get_util() {
+        return double(get_dev_util())/1000000;
+      }
+
 
       class kv_iter {
       public:

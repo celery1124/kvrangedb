@@ -538,6 +538,10 @@ class KVSSDEnvOpt : public EnvWrapper {
     *result = nullptr;
     return Status::OK();
   }
+
+  virtual double GetDevUtil() {
+    return (double)kvd_->get_util();
+  }
 };
 
 /*****  KVSSDEnvOpt End  *****/

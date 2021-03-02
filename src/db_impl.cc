@@ -117,7 +117,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
 }
 
 DBImpl::~DBImpl() {
-  RecordTick(options_.statistics.get(), DEV_UTIL, kvd_->get_util());
+  RecordTick(options_.statistics.get(), DEV_UTIL, kvd_->get_dev_util());
   if (options_.cleanIndex) {
     for (int i = 0; i < options_.indexNum; i++) {
       std::string meta_name = std::to_string(i)+"/CURRENT";

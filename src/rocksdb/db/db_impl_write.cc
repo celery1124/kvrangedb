@@ -1091,6 +1091,14 @@ Status DBImpl::DelayWrite(uint64_t num_bytes,
         }
 
         delayed = true;
+        // schedule purge obsolete files
+        JobContext job_context(next_job_id_.fetch_add(1), true);
+        if (job_context.HaveSomethingToDelete()) {
+          // Call PurgeObsoleteFiles() without holding mutex.
+          PurgeObsoleteFiles(job_context, true); // schedule only
+        }
+        job_context.Clean();
+
         // Sleep for 0.001 seconds
         env_->SleepForMicroseconds(kDelayInterval);
       }
@@ -1335,6 +1343,7 @@ Status DBImpl::SwitchMemtable(ColumnFamilyData* cfd, WriteContext* context) {
   cfd->imm()->Add(cfd->mem(), &context->memtables_to_free_);
   new_mem->Ref();
   cfd->SetMemtable(new_mem);
+  cfd->env_ = env_;
   InstallSuperVersionAndScheduleWork(cfd, &context->superversion_context,
                                      mutable_cf_options);
   if (two_write_queues_) {

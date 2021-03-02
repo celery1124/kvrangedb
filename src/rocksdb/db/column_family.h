@@ -155,7 +155,7 @@ class ColumnFamilySet;
 class ColumnFamilyData {
  public:
   ~ColumnFamilyData();
-
+  Env* env_;
   // thread-safe
   uint32_t GetID() const { return id_; }
   // thread-safe

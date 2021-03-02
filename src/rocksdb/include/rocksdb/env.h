@@ -366,6 +366,11 @@ class Env {
     return NowMicros() * 1000;
   }
 
+  // Return storage utilization 0-1 (by Mian)
+  virtual double GetDevUtil() {
+    return 0;
+  }
+
   // Sleep/delay the thread for the perscribed number of micro-seconds.
   virtual void SleepForMicroseconds(int micros) = 0;
 
@@ -1047,6 +1052,7 @@ class EnvWrapper : public Env {
   }
   uint64_t NowMicros() override { return target_->NowMicros(); }
   uint64_t NowNanos() override { return target_->NowNanos(); }
+  double GetDevUtil() override {return target_->GetDevUtil(); }
 
   void SleepForMicroseconds(int micros) override {
     target_->SleepForMicroseconds(micros);
