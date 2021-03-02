@@ -1091,14 +1091,6 @@ Status DBImpl::DelayWrite(uint64_t num_bytes,
         }
 
         delayed = true;
-        // schedule purge obsolete files
-        JobContext job_context(next_job_id_.fetch_add(1), true);
-        if (job_context.HaveSomethingToDelete()) {
-          // Call PurgeObsoleteFiles() without holding mutex.
-          PurgeObsoleteFiles(job_context, true); // schedule only
-        }
-        job_context.Clean();
-
         // Sleep for 0.001 seconds
         env_->SleepForMicroseconds(kDelayInterval);
       }

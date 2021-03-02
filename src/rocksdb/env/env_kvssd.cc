@@ -452,15 +452,15 @@ class KVSSDEnvOpt : public EnvWrapper {
         return Status::IOError(fname, "KV not found");
       }
       // read offset list and delete block
-      char *p = base;
-      for (unsigned int i = 0; i < size/sizeof(int) - 1; i++) {
+      char *p = base + size - sizeof(int);
+      while (true) {
         offset = DecodeFixed32(p);
         std::string *block_name = new std::string(fname+'/'+std::to_string(offset));
         kvssd::Slice *block_key = new kvssd::Slice (*block_name);
         AsyncDel_context *ctx = new AsyncDel_context(&completed, block_name, block_key);
         kvd_->kv_delete_async(block_key, kv_del_async_cb, (void*)ctx);
         submitted++;
-        p += sizeof(int);
+        p -= sizeof(int);
         if (offset == 0) break;
       }
       AsyncDel_context *ctx = new AsyncDel_context(&completed, meta_name, meta_key);
@@ -569,6 +569,8 @@ class KVSSDEnvOpt : public EnvWrapper {
   }
 
   virtual double GetDevUtil() {
+    // double res = kvd_->get_util();
+    // printf("getdevutil %.3f\n", res);
     return (double)kvd_->get_util();
   }
 };

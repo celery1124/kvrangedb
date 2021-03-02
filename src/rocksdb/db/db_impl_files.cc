@@ -344,7 +344,8 @@ void DBImpl::DeleteObsoleteFileImpl(int job_id, const std::string& fname,
 void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
   // we'd better have sth to delete
   assert(state.HaveSomethingToDelete());
-
+// double devUtilBefore = env_->GetDevUtil();
+// int purgeCnt = 0;
   // this checks if FindObsoleteFiles() was run before. If not, don't do
   // PurgeObsoleteFiles(). If FindObsoleteFiles() was run, we need to also
   // run PurgeObsoleteFiles(), even if disable_delete_obsolete_files_ is true
@@ -471,6 +472,7 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
     std::string fname;
     if (type == kTableFile) {
       // evict from cache
+      // purgeCnt++;
       TableCache::Evict(table_cache_.get(), number);
       fname = TableFileName(immutable_db_options_.db_paths, number, path_id);
     } else {
@@ -529,6 +531,9 @@ void DBImpl::PurgeObsoleteFiles(const JobContext& state, bool schedule_only) {
       }
     }
   }
+  
+// double devUtilAfter = env_->GetDevUtil();
+// if (purgeCnt > 0) printf("[purge %d] before purge %.6f, after purge %.6f\n", purgeCnt, devUtilBefore, devUtilAfter);
 #ifndef ROCKSDB_LITE
   wal_manager_.PurgeObsoleteWALFiles();
 #endif  // ROCKSDB_LITE

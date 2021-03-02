@@ -644,7 +644,8 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
     bool was_stopped = write_controller->IsStopped();
     bool needed_delay = write_controller->NeedsDelay();
 
-    if (env_ != nullptr && env_->GetDevUtil() >=0.25) {
+    if (env_ != nullptr && env_->GetDevUtil() >=0.75) {
+      write_controller_token_ = write_controller->GetStopToken();
       write_stall_condition = WriteStallCondition::kStopped;
     }
     else if (imm()->NumNotFlushed() >= mutable_cf_options.max_write_buffer_number) {
