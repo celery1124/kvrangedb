@@ -352,40 +352,55 @@ Status DBImpl::Put(const WriteOptions& options,
   RecordTick(options_.statistics.get(), REQ_PUT);
   //printf("KVRangeDB Put %s\n", std::string(key.data(), key.size()).c_str());
 
-  // insert to in-memory cache
   std::string skey(key.data(), key.size());
-  Cache::Handle* h = insert_cache(skey, value);
-  release_cache(h);
 
-  // smaller values
-  if (value.size() < options_.packThres && (!options_.packThreadsDisable)) {
-    int size = get_phyKV_size(key, value);
-    packKVEntry *item = new packKVEntry(size, key, value);
-    while (pack_q_.size_approx() > options_.packQueueDepth) {
-      pack_q_wait_.reset();
-      pack_q_wait_.wait();
-    }
-    pack_q_.enqueue(item);
-  }
-
-  else {
+  if (options.update && (value.size() >= options_.packThres || options_.packThreadsDisable)) {
+    erase_cache(skey);
+    Cache::Handle* h = insert_cache(skey, value);
+    release_cache(h);
     kvssd::Slice put_key(key.data(), key.size());
     kvssd::Slice put_val(value.data(), value.size());
 
-    // sync write 1-data, 2-index
-    // Monitor mon;
-    // kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
-    // // index write
-    // int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
-    // key_idx_[idx_id]->Put(key);
-    
-    // mon.wait(); // wait data I/O done
-
-    // sync write 1-data, 2-index
+    // only update data not index
     kvd_->kv_store(&put_key, &put_val);
-    int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
-    key_idx_[idx_id]->Put(key);
   }
+  else {
+    // insert to in-memory cache
+    Cache::Handle* h = insert_cache(skey, value);
+    release_cache(h);
+
+    // smaller values
+    if (value.size() < options_.packThres && (!options_.packThreadsDisable)) {
+      int size = get_phyKV_size(key, value);
+      packKVEntry *item = new packKVEntry(size, key, value);
+      while (pack_q_.size_approx() > options_.packQueueDepth) {
+        pack_q_wait_.reset();
+        pack_q_wait_.wait();
+      }
+      pack_q_.enqueue(item);
+    }
+
+    else {
+      kvssd::Slice put_key(key.data(), key.size());
+      kvssd::Slice put_val(value.data(), value.size());
+
+      // sync write 1-data, 2-index
+      // Monitor mon;
+      // kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
+      // // index write
+      // int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
+      // key_idx_[idx_id]->Put(key);
+      
+      // mon.wait(); // wait data I/O done
+
+      // sync write 1-data, 2-index
+      kvd_->kv_store(&put_key, &put_val);
+      int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
+      key_idx_[idx_id]->Put(key);
+    }
+  }
+
+  
   return Status();
 }
 

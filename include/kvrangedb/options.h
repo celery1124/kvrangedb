@@ -323,11 +323,15 @@ struct WriteOptions {
   // Batch size for batch index write
   // Default: 8
   size_t batchIDXSize;
+  // Update existing record
+  // Default: false
+  bool update;
 
   WriteOptions()
       : sync(false),
         batchIDXWrite(false),
-        batchIDXSize(8) {
+        batchIDXSize(8),
+        update(false) {
   }
 };
 
