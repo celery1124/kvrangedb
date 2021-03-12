@@ -12,6 +12,8 @@
 #include "rocksdb/iterator.h"
 #include "rocksdb/write_batch.h"
 #include "rocksdb/comparator.h"
+#include "rocksdb/filter_policy.h"
+#include "rocksdb/convenience.h"
 
 namespace kvrangedb {
 
@@ -153,18 +155,21 @@ private:
 KVIndexRocks::KVIndexRocks(const Options& db_options, kvssd::KVSSD* kvd, std::string& name) : name_(name), kvd_(kvd) {
   rocksdb::Options options;
   options.IncreaseParallelism();
-  options.OptimizeLevelStyleCompaction();
+  //options.OptimizeLevelStyleCompaction();
   options.create_if_missing = true;
   options.max_open_files = 1000;
   options.compression = rocksdb::kNoCompression;
   options.paranoid_checks = false;
-  options.write_buffer_size = 20 << 20;
-  options.target_file_size_base = 20 * 1048576;
-  options.max_bytes_for_level_base = 10 * 1048576;
+  options.write_buffer_size = 64 << 20;
+  options.target_file_size_base = 64 * 1048576;
+  options.max_bytes_for_level_base = 64 * 1048576;
 
   rocksdb::BlockBasedTableOptions table_options;
+  // table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(14, false));
   table_options.block_size = 16384;
-  table_options.block_cache = rocksdb::NewLRUCache(db_options.indexCacheSize * 1024 * 1024LL); 
+  table_options.cache_index_and_filter_blocks = true;
+  if (db_options.indexCacheSize > 0)
+    table_options.block_cache = rocksdb::NewLRUCache((size_t)db_options.indexCacheSize * 1024 * 1024LL); 
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
   // apply db options
@@ -180,6 +185,7 @@ KVIndexRocks::KVIndexRocks(const Options& db_options, kvssd::KVSSD* kvd, std::st
 }
 
 KVIndexRocks::~KVIndexRocks() {
+  rocksdb::CancelAllBackgroundWork(db_, true);
   delete db_;
   delete cmp_;
 }
