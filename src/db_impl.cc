@@ -231,7 +231,6 @@ static void do_pack_KVs (uint64_t seq, std::vector<packKVEntry*>& kvs, int pack_
       memcpy(p, kvs[i]->value.data(), kvs[i]->value.size());
       p += kvs[i]->value.size();
 
-      delete kvs[i]; // de-allocate KV buffer;
     }
     assert((int)(p -pack_val_str) == pack_size);
     pack_val = kvssd::Slice (pack_val_str, pack_size);
@@ -326,6 +325,10 @@ void DBImpl::processQ(int id) {
       key_idx_[0]->Write(index_batch); // pack only support single index tree
       
       // clean up
+      for (int i = 0; i < kvs.size(); i++) {
+        if (kvs[i]->mon) kvs[i]->mon->notify();
+        delete kvs[i]; // de-allocate KV buffer;
+      }
       free((char*) pack_key.data());
       free((char*) pack_val.data());
       delete index_batch;
@@ -372,12 +375,14 @@ Status DBImpl::Put(const WriteOptions& options,
     // smaller values
     if (value.size() < options_.packThres && (!options_.packThreadsDisable)) {
       int size = get_phyKV_size(key, value);
-      packKVEntry *item = new packKVEntry(size, key, value);
-      while (pack_q_.size_approx() > options_.packQueueDepth) {
-        pack_q_wait_.reset();
-        pack_q_wait_.wait();
-      }
+      Monitor mon;
+      packKVEntry *item = new packKVEntry(size, key, value, &mon);
+      // while (pack_q_.size_approx() > options_.packQueueDepth) {
+      //   pack_q_wait_.reset();
+      //   pack_q_wait_.wait();
+      // }
       pack_q_.enqueue(item);
+      mon.wait();
     }
 
     else {
@@ -811,7 +816,7 @@ void DBImpl::ManualCompaction() {
       Slice lkey (pack_key_batch[i]);
       Slice cold_val (vbuf_list[i], actual_vlen_list[i]);
       int size = get_phyKV_size(lkey, cold_val);
-      packKVEntry *item = new packKVEntry(size, lkey, cold_val);
+      packKVEntry *item = new packKVEntry(size, lkey, cold_val, nullptr);
       while (pack_q_.size_approx() > options_.packQueueDepth) {
         pack_q_wait_.reset();
         pack_q_wait_.wait();

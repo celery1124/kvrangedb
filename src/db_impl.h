@@ -52,8 +52,9 @@ struct packKVEntry {
   int size;
   std::string key;
   std::string value;
-  packKVEntry(int _size, const Slice& _key, const Slice& _val)
-              :size(_size) {
+  Monitor *mon;
+  packKVEntry(int _size, const Slice& _key, const Slice& _val, Monitor *_mon)
+              :size(_size), mon(_mon) {
                 key = _key.ToString();
                 value = _val.ToString();
               }
