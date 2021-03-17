@@ -647,7 +647,12 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
     // if (env_ != nullptr && env_->GetDevUtil() >=0.75) {
     //   write_controller_token_ = write_controller->GetStopToken();
     //   write_stall_condition = WriteStallCondition::kStopped;
-    // } else 
+    // } else
+    if (env_ != nullptr && env_->GetDevUtil() >=0.75) {
+      fprintf(stderr, "kvssd util above 0.75 (%.3f), abort\n", env_->GetDevUtil());
+      exit(-1);
+    }
+ 
     if (imm()->NumNotFlushed() >= mutable_cf_options.max_write_buffer_number) {
       write_controller_token_ = write_controller->GetStopToken();
       internal_stats_->AddCFStats(InternalStats::MEMTABLE_LIMIT_STOPS, 1);
