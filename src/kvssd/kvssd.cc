@@ -4,6 +4,11 @@
 
 namespace kvssd {
 
+  typedef struct {
+    sem_t *q_sem;
+    void *args;
+  } aio_context;
+
   void on_io_complete(kvs_callback_context* ioctx) {
     if (ioctx->result == KVS_ERR_CONT_NOT_EXIST) {
       int test = 1;
@@ -12,11 +17,14 @@ namespace kvssd {
       printf("io error: op = %d, key = %s, result = 0x%x, err = %s\n", ioctx->opcode, ioctx->key ? (char*)ioctx->key->key:0, ioctx->result, kvs_errstr(ioctx->result));
       exit(1);
     }
+
+    aio_context *aio_ctx = (aio_context *)ioctx->private2;
+    sem_post(aio_ctx->q_sem);
     
     switch (ioctx->opcode) {
     case IOCB_ASYNC_PUT_CMD : {
       void (*callback_put) (void *) = (void (*)(void *))ioctx->private1;
-      void *args_put = (void *)ioctx->private2;
+      void *args_put = (void *)aio_ctx->args;
       if (callback_put != NULL) {
         callback_put((void *)args_put);
       }
@@ -26,7 +34,7 @@ namespace kvssd {
     }
     case IOCB_ASYNC_GET_CMD : {
       void (*callback_get) (void *) = (void (*)(void *))ioctx->private1;
-      Async_get_context *args_get = (Async_get_context *)ioctx->private2;
+      Async_get_context *args_get = (Async_get_context *)aio_ctx->args;
       KVSSD *kvd = args_get->dev;
       args_get->vbuf = (char*) ioctx->value->value;
       args_get->actual_len = ioctx->value->actual_value_size;
@@ -41,7 +49,7 @@ namespace kvssd {
     }
     case IOCB_ASYNC_DEL_CMD : {
       void (*callback_del) (void *) = (void (*)(void *))ioctx->private1;
-      void *args_del = (void *)ioctx->private2;
+      void *args_del = (void *)aio_ctx->args;
       if (callback_del != NULL) {
         callback_del((void *)args_del);
       }
@@ -109,11 +117,13 @@ namespace kvssd {
   }
 
   kvs_result KVSSD::kv_store_async(Slice *key, Slice *val, void (*callback)(void *), void *args) {
+    sem_wait(&q_sem);
     kvs_store_option option;
     option.st_type = KVS_STORE_POST;
     option.kvs_store_compress = false;
 
-    const kvs_store_context put_ctx = {option, (void *)callback, (void *)args};
+    aio_context *aio_ctx = new aio_context {&q_sem, args};
+    const kvs_store_context put_ctx = {option, (void *)callback, (void *)aio_ctx};
     kvs_key *kvskey = (kvs_key*)malloc(sizeof(kvs_key));
     kvskey->key = (void *)key->data();
     kvskey->length = (uint8_t)key->size();
@@ -344,6 +354,7 @@ namespace kvssd {
   // currently consider async get buffer size is large enough
   // in other words, async get can retrieve the whole value with 1 I/O.
   kvs_result KVSSD::kv_get_async(const Slice *key, void (*callback)(void *), void *args) {
+    sem_wait(&q_sem);
     char *vbuf = (char *) malloc(INIT_GET_BUFF);
     kvs_key *kvskey = (kvs_key*)malloc(sizeof(kvs_key));
     kvskey->key = (void *) key->data();
@@ -357,7 +368,9 @@ namespace kvssd {
     memset(&option, 0, sizeof(kvs_retrieve_option));
     option.kvs_retrieve_decompress = false;
     option.kvs_retrieve_delete = false;
-    const kvs_retrieve_context ret_ctx = {option, (void *)callback, (void*)args};
+
+    aio_context *aio_ctx = new aio_context {&q_sem, args};
+    const kvs_retrieve_context ret_ctx = {option, (void *)callback, (void*)aio_ctx};
     kvs_result ret = kvs_retrieve_tuple_async(cont_handle, kvskey, kvsvalue, &ret_ctx, on_io_complete);
     if(ret != KVS_SUCCESS) {
       printf("kv_get_async error %d\n", ret);
@@ -403,10 +416,13 @@ namespace kvssd {
   }
 
   kvs_result KVSSD::kv_delete_async(const Slice *key, void (*callback)(void *), void *args) {
+    sem_wait(&q_sem);
     kvs_key *kvskey = (kvs_key*)malloc(sizeof(kvs_key));
     kvskey->key = (void *)key->data();
     kvskey->length = (uint8_t)key->size();
-    const kvs_delete_context del_ctx = { {false}, (void *)callback, (void *)args};
+
+    aio_context *aio_ctx = new aio_context {&q_sem, args};
+    const kvs_delete_context del_ctx = { {false}, (void *)callback, (void *)aio_ctx};
     kvs_result ret = kvs_delete_tuple_async(cont_handle, kvskey, &del_ctx, on_io_complete);
 
     if(ret != KVS_SUCCESS) {

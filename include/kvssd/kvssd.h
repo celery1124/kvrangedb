@@ -8,11 +8,13 @@
 #include <string>
 #include <atomic>
 #include <vector>
+#include <semaphore.h>
 #include "slice.h"
 #include "kvs_api.h"
 
 #include "kvrangedb/statistics.h"
 
+#define DEV_Q_DEPTH 1024
 #define INIT_GET_BUFF 65536 // 64KB
 using namespace kvrangedb;
 
@@ -45,16 +47,18 @@ namespace kvssd {
 
       friend class kv_iter;
     public:
+      sem_t q_sem;
       Statistics *statistics;
       // kvd_stats stats_;
       KVSSD(const char* dev_path, Statistics *stats) : statistics(stats) {
+        sem_init(&q_sem, 0, DEV_Q_DEPTH);
         memset(kvs_dev_path, 0, 32);
         memcpy(kvs_dev_path, dev_path, strlen(dev_path));
         kvs_init_env_opts(&options);
         options.memory.use_dpdk = 0;
         // options for asynchronized call
         options.aio.iocoremask = 0;
-        options.aio.queuedepth = 64;
+        options.aio.queuedepth = DEV_Q_DEPTH;
 
         const char *configfile = "kvssd_emul.conf";
         options.emul_config_file =  configfile;
@@ -68,6 +72,7 @@ namespace kvssd {
         }
       }
       ~KVSSD() {
+        sem_destroy(&q_sem);
         RecordTick(statistics, DEV_UTIL, get_util());
         kvs_close_container(cont_handle);
         kvs_close_device(dev);
