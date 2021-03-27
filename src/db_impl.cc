@@ -333,7 +333,7 @@ void DBImpl::processQ(int id) {
       free((char*) pack_val.data());
       delete index_batch;
 
-      if (pack_q_.size_approx() <= options_.packQueueDepth) 
+      if (pack_q_.size_approx() < options_.packQueueDepth) 
       pack_q_wait_.notifyAll();
     }
     else { // check shutdown
@@ -375,14 +375,16 @@ Status DBImpl::Put(const WriteOptions& options,
     // smaller values
     if (value.size() < options_.packThres && (!options_.packThreadsDisable)) {
       int size = get_phyKV_size(key, value);
-      Monitor mon;
-      packKVEntry *item = new packKVEntry(size, key, value, &mon);
-      // while (pack_q_.size_approx() > options_.packQueueDepth) {
-      //   pack_q_wait_.reset();
-      //   pack_q_wait_.wait();
-      // }
+      // Monitor mon;
+      // packKVEntry *item = new packKVEntry(size, key, value, &mon);
+
+      packKVEntry *item = new packKVEntry(size, key, value, nullptr);
+      while (pack_q_.size_approx() > options_.packQueueDepth) {
+        pack_q_wait_.reset();
+        pack_q_wait_.wait();
+      }
       pack_q_.enqueue(item);
-      mon.wait();
+      // mon.wait();
     }
 
     else {
