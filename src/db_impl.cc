@@ -104,7 +104,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   // initialize range filter
   if (options.rfType == HiBloom) {
     rf_ = NewHiBloomFilter(options.rfBitsPerKey, options.rfBitsPerLevel, options.rfLevels,
-    options.rfExamBits, options.rfNumKeys, options_.statistics.get());
+    options.rfExamBits, options.rfNumKeys, options.rfMaxProbes, options_.statistics.get());
   }
   else if (options.rfType == RBloom) {
     rf_ = NewRBloomFilter(options.rfBitsPerKey, options.rfExamBits, options.rfNumKeys, 

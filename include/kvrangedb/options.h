@@ -163,6 +163,10 @@ struct Options {
   // Default: 16
   int rfExamBits;
 
+  // Range filter max probe times
+  // Default: 256
+  int rfMaxProbes;
+
   // Range filter levels (HiBloom)
   // Default: 1
   int rfLevels;
@@ -208,6 +212,7 @@ struct Options {
               rfNumKeys(1000000000),
               rfBitsPerKey(16),
               rfExamBits(16),
+              rfMaxProbes(256),
               rfLevels(1),
               rfBitsPerLevel(1),
               statistics(nullptr),

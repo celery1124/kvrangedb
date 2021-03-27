@@ -106,7 +106,7 @@ private:
 
 const BloomFilter* NewBloomFilter(int bits_per_key);
 
-RangeFilter* NewHiBloomFilter(int bits_per_key, int bits_per_level, int levels, int exam_suffix_bits, int num_keys, Statistics *stats);
+RangeFilter* NewHiBloomFilter(int bits_per_key, int bits_per_level, int levels, int exam_suffix_bits, int num_keys, int max_probes, Statistics *stats);
 RangeFilter* NewRBloomFilter(int bits_per_key, int max_probes_bits, int num_keys, Statistics *stats);
 
 }  // namespace kvrangedb

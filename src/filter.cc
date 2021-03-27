@@ -11,8 +11,8 @@ namespace kvrangedb {
 class HiBloomFilter : public RangeFilter {
  public:
 
-  HiBloomFilter(int bits_per_key, int bits_per_level, int levels, int exam_suffix_bits, int num_keys, Statistics *stats) 
-  : num_keys_(num_keys), bits_per_level_(bits_per_level), levels_(levels), total_bits_per_key_(bits_per_key), statistics_(stats) {
+  HiBloomFilter(int bits_per_key, int bits_per_level, int levels, int exam_suffix_bits, int num_keys, int max_probes, Statistics *stats) 
+  : num_keys_(num_keys), max_probes_(max_probes), bits_per_level_(bits_per_level), levels_(levels), total_bits_per_key_(bits_per_key), statistics_(stats) {
     
     int filter_bytes = 0;
     bits_per_key_ = new double[levels];
@@ -118,6 +118,8 @@ class HiBloomFilter : public RangeFilter {
     std::reverse(start_key.begin(), start_key.end());
     std::reverse(end_key.begin(), end_key.end());
 
+    int probe_cnt = 0;
+
     size_t range_dist_bits = FindRangeDistance(start_key, end_key);
     // round to multiple bits_per_level
     if (range_dist_bits%bits_per_level_ != 0)
@@ -130,7 +132,7 @@ class HiBloomFilter : public RangeFilter {
       std::string prefix = start_key;
       uint32_t *suffix = (uint32_t *)&prefix[0];
       *suffix = *suffix & (~0u << range_dist_bits);
-      return RangeCheck(*(uint32_t *)start_key.data(), *(uint32_t *)end_key.data(), prefix, range_dist_bits-1);
+      return RangeCheck(*(uint32_t *)start_key.data(), *(uint32_t *)end_key.data(), prefix, range_dist_bits-1, &probe_cnt);
     }
   }
 
@@ -140,7 +142,7 @@ class HiBloomFilter : public RangeFilter {
  // Check range (lkey -> hkey) exist in filter (At most 1byte suffix)
   // prefix - prefix key
   // l - suffix index (multiple of bits_per_level_)
-  bool RangeCheck(uint32_t lkey, uint32_t hkey, std::string prefix, int l) {
+  bool RangeCheck(uint32_t lkey, uint32_t hkey, std::string prefix, int l, int *probe_cnt) {
     uint32_t *suffix = (uint32_t *)&prefix[0];
     if (*suffix > hkey || (*suffix+(1<<(l+1))-1) < lkey) {
       // prefix not in range
@@ -148,12 +150,12 @@ class HiBloomFilter : public RangeFilter {
     }
     if (*suffix >= lkey && (*suffix+(1<<(l+1))-1) <= hkey) {
       // prefix in range
-      return Doubt(prefix, l);
+      return Doubt(prefix, l, probe_cnt);
     }
     uint32_t orig_suffix = *suffix;
     for (int i = 0; i < (1<<bits_per_level_); i++) {
       *suffix = orig_suffix | (i<<(l-bits_per_level_+1));
-      if (RangeCheck(lkey, hkey, prefix, l-bits_per_level_)) return true;
+      if (RangeCheck(lkey, hkey, prefix, l-bits_per_level_, probe_cnt)) return true;
     }
     return false;
   }
@@ -161,11 +163,13 @@ class HiBloomFilter : public RangeFilter {
   // Check prefix subtree exist in filter
   // prefix - prefix key
   // l - suffix index (multiple of bits_per_level_)
-  bool Doubt(std::string prefix, int l) {
+  bool Doubt(std::string prefix, int l, int *probe_cnt) {
     if (l < -1) return true;
 
     if ((l+1)/bits_per_level_ < levels_) {
       RecordTick(statistics_, FILTER_RANGE_PROBES);
+      *probe_cnt++;
+      if (*probe_cnt > max_probes_) return true;
       // std::string check_key(prefix.rbegin(), prefix.rend());
       if (!KeyMayMatchLevel(prefix, (l+1)/bits_per_level_)) return false;
     }
@@ -173,7 +177,7 @@ class HiBloomFilter : public RangeFilter {
     uint32_t orig_suffix = *suffix;
     for (int i = 0; i < (1<<bits_per_level_); i++) {
       *suffix = orig_suffix | (i<<(l-bits_per_level_+1));
-      if (Doubt(prefix, l-bits_per_level_)) return true;
+      if (Doubt(prefix, l-bits_per_level_, probe_cnt)) return true;
     }
     return false;
   }
@@ -235,6 +239,7 @@ class HiBloomFilter : public RangeFilter {
   }
 
   size_t num_keys_;
+  size_t max_probes_;
   size_t range_dist_bits_thres_;
   size_t bits_per_level_;
   size_t levels_; // less than 8 due to memory budget
@@ -403,8 +408,8 @@ const BloomFilter* NewBloomFilter(int bits_per_key) {
   return new BloomFilter(bits_per_key);
 }
 
-RangeFilter* NewHiBloomFilter(int bits_per_key, int bits_per_level, int levels, int exam_suffix_bits, int num_keys, Statistics *stats) {
-  return new HiBloomFilter(bits_per_key, bits_per_level, levels, exam_suffix_bits, num_keys, stats);
+RangeFilter* NewHiBloomFilter(int bits_per_key, int bits_per_level, int levels, int exam_suffix_bits, int num_keys, int max_probes, Statistics *stats) {
+  return new HiBloomFilter(bits_per_key, bits_per_level, levels, exam_suffix_bits, num_keys, max_probes, stats);
 }
 
 RangeFilter* NewRBloomFilter(int bits_per_key, int max_probes_bits, int num_keys, Statistics *stats) {
