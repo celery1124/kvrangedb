@@ -1,0 +1,7 @@
+*.log
+ts_bench_kv
+ts_bench_wisc
+ts_bench_rocks
+ycsb_kv
+ycsb_wisc
+ycsb_rocks
