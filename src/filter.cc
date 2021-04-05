@@ -168,7 +168,7 @@ class HiBloomFilter : public RangeFilter {
 
     if ((l+1)/bits_per_level_ < levels_) {
       RecordTick(statistics_, FILTER_RANGE_PROBES);
-      *probe_cnt++;
+      (*probe_cnt)++;
       if (*probe_cnt > max_probes_) return true;
       // std::string check_key(prefix.rbegin(), prefix.rend());
       if (!KeyMayMatchLevel(prefix, (l+1)/bits_per_level_)) return false;

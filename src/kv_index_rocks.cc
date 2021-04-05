@@ -167,9 +167,13 @@ KVIndexRocks::KVIndexRocks(const Options& db_options, kvssd::KVSSD* kvd, std::st
   rocksdb::BlockBasedTableOptions table_options;
   // table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(14, false));
   table_options.block_size = 16384;
-  table_options.cache_index_and_filter_blocks = true;
+  //table_options.cache_index_and_filter_blocks = true;
   if (db_options.indexCacheSize > 0)
-    table_options.block_cache = rocksdb::NewLRUCache((size_t)db_options.indexCacheSize * 1024 * 1024LL); 
+    table_options.block_cache = rocksdb::NewLRUCache((size_t)db_options.indexCacheSize * 1024 * 1024LL);
+  else {
+    //table_options.block_cache = rocksdb::NewLRUCache(16384);
+    table_options.no_block_cache = true; 
+  }
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
   // apply db options
