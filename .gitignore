@@ -1,1 +1,4 @@
+KVSSD-1.2.0/PDK
+test/db_perf
+test/db_test
 *.so*

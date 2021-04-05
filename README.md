@@ -2,9 +2,11 @@
 
 This project aims at supporting range queries on KVSSD by storing a secondary ordered key index in device.
 
+We compare with an in-house [WiscKey][wisckey repo] implementation on block SSD and [RocksKV][rockskv repo], a simple RocksDB porting to KVSSD.
+
 # Interface
 
-Provide a leveldb like interface with:
+Provide a rocksdb like interface with:
 1. Custom comparator
 2. Batch update
 3. Iterator for range query (**currently only support forward iterator**)
@@ -68,15 +70,15 @@ Note: please keep the kvssd_emul.conf file in the executable file directory. Thi
 
 <del>Enhance building system</del>
 
-<del>Use environment variable to load different code configurations<del>
+<del>Use environment variable to load different code configurations</del>
 
-Optimize value prefetch (when to prefetch, seperate thread for issuing I/O)
+<del>Optimize value prefetch (when to prefetch, seperate thread for issuing I/O)</del>
 
-LSM Tree:
-1. merge code for range filter and value 
-2. <del>prefetch (currently only baseline)</del>
+<del>LSM Tree:</del>
+1. <del>merge code for range filter and</del>
+2. <del>value prefetch (currently only baseline)</del>
 
-B Tree:
-1. implement delete
-2. add concurrency control
 
+
+[wisckey repo]:https://github.com/celery1124/wisckey
+[rockskv repo]:https://github.com/celery1124/rockskv
