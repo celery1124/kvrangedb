@@ -11,6 +11,10 @@ Provide a rocksdb like interface with:
 2. Batch update
 3. Iterator for range query (**currently only support forward iterator**)
 
+# YCSB binding
+
+A simple java native interface (JNI) implementation with YCSB client is created for KVRangeDB. Please refer to the repo [ycsb-binding][ycsb-binding repo].
+
 # Build Test example
 
 ## build Samsung KVSSD
@@ -107,3 +111,4 @@ Note: please keep the kvssd_emul.conf file in the executable file directory. Thi
 
 [wisckey repo]:https://github.com/celery1124/wisckey
 [rockskv repo]:https://github.com/celery1124/rockskv
+[ycsb-binding repo]:https://github.com/celery1124/ycsb-bindings
