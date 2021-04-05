@@ -13,7 +13,7 @@ Provide a rocksdb like interface with:
 
 # YCSB binding
 
-A simple java native interface (JNI) implementation with YCSB client is created for KVRangeDB. Please refer to the repo [ycsb-binding][ycsb-binding repo].
+A simple java native interface (JNI) implementation with YCSB client is created for KVRangeDB. Please refer to the repo [ycsb-bindings][ycsb-bindings repo].
 
 # Build Test example
 
@@ -111,4 +111,4 @@ Note: please keep the kvssd_emul.conf file in the executable file directory. Thi
 
 [wisckey repo]:https://github.com/celery1124/wisckey
 [rockskv repo]:https://github.com/celery1124/rockskv
-[ycsb-binding repo]:https://github.com/celery1124/ycsb-bindings
+[ycsb-bindings repo]:https://github.com/celery1124/ycsb-bindings
