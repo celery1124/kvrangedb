@@ -165,8 +165,8 @@ private:
       newDB = false; // no meta;
     }
     else {
-      free(vbuf);
       seq = *((uint64_t*)vbuf);
+      free(vbuf);
       printf("Load KVRangeDB meta, seq# %llu\n", seq);
       newDB = true;
     }
