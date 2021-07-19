@@ -1,4 +1,5 @@
 #include "kvssd/kvssd.h"
+#include "../hash.h"
 #include <string>
 #define ITER_BUFF 32768
 
@@ -34,8 +35,8 @@ namespace kvssd {
     }
     case IOCB_ASYNC_GET_CMD : {
       void (*callback_get) (void *) = (void (*)(void *))ioctx->private1;
-      Async_get_context *args_get = (Async_get_context *)aio_ctx->args;
-      KVSSD *kvd = args_get->dev;
+      Async_sd_get_context *args_get = (Async_sd_get_context *)aio_ctx->args;
+      KVSSD_SD *kvd = args_get->dev;
       args_get->vbuf = (char*) ioctx->value->value;
       args_get->actual_len = ioctx->value->actual_value_size;
       RecordTick(kvd->statistics, IO_GET_BYTES, args_get->actual_len);
@@ -72,7 +73,7 @@ namespace kvssd {
     kvs_iterator_option g_iter_mode;
   };
 
-  bool KVSSD::kv_exist (const Slice *key) {
+  bool KVSSD_SD::kv_exist (const Slice *key) {
     const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size()};
     uint8_t result_buf[1];
     const kvs_exist_context exist_ctx = {NULL, NULL};
@@ -81,7 +82,7 @@ namespace kvssd {
     return result_buf[0]&0x1 == 1;
   }
 
-  uint32_t KVSSD::kv_get_size(const Slice *key) {
+  uint32_t KVSSD_SD::kv_get_size(const Slice *key) {
     kvs_tuple_info info;
 
     const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size()};
@@ -94,7 +95,7 @@ namespace kvssd {
     return info.value_length;
   }
 
-  kvs_result KVSSD::kv_store(const Slice *key, const Slice *val) {
+  kvs_result KVSSD_SD::kv_store(const Slice *key, const Slice *val) {
     kvs_store_option option;
     option.st_type = KVS_STORE_POST;
     option.kvs_store_compress = false;
@@ -111,12 +112,11 @@ namespace kvssd {
 
     RecordTick(statistics, IO_PUT);
     RecordTick(statistics, IO_PUT_BYTES, val->size());
-    // stats_.num_store.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_store] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
     return ret;
   }
 
-  kvs_result KVSSD::kv_store_async(Slice *key, Slice *val, void (*callback)(void *), void *args) {
+  kvs_result KVSSD_SD::kv_store_async(Slice *key, Slice *val, void (*callback)(void *), void *args) {
     sem_wait(&q_sem);
     kvs_store_option option;
     option.st_type = KVS_STORE_POST;
@@ -140,11 +140,10 @@ namespace kvssd {
 
     RecordTick(statistics, IO_PUT);
     RecordTick(statistics, IO_PUT_BYTES, val->size());
-    // stats_.num_store.fetch_add(1, std::memory_order_relaxed);
     return ret;
   }
   // (not support in device)
-  // kvs_result KVSSD::kv_append(const Slice *key, const Slice *val) {
+  // kvs_result KVSSD_SD::kv_append(const Slice *key, const Slice *val) {
   //   kvs_store_option option;
   //   option.st_type = KVS_STORE_APPEND;
   //   option.kvs_store_compress = false;
@@ -163,7 +162,7 @@ namespace kvssd {
   // }
 
   // inplement append using kv_store and kv_get
-  kvs_result KVSSD::kv_append(const Slice *key, const Slice *val) {
+  kvs_result KVSSD_SD::kv_append(const Slice *key, const Slice *val) {
     // get old KV
     char *vbuf; int vlen;
     kvs_result ret;
@@ -220,14 +219,13 @@ namespace kvssd {
 
     RecordTick(statistics, IO_APPEND);
     RecordTick(statistics, IO_APP_BYTES, val->size());
-    // stats_.num_append.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_append] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), val->size());
     return ret;
   }
 
 
   typedef struct {
-    KVSSD *kvd;
+    KVSSD_SD *kvd;
     Slice *key;
     Slice *val;
     char *vbuf;
@@ -277,7 +275,7 @@ namespace kvssd {
   }
 
   // implement async kv append using kv_get_async and kv_store_async
-  kvs_result KVSSD::kv_append_async(const Slice *key, const Slice *val, void (*callback)(void *), void *args) {
+  kvs_result KVSSD_SD::kv_append_async(const Slice *key, const Slice *val, void (*callback)(void *), void *args) {
     // get old KV
     Async_append_context *io_ctx = new Async_append_context;
     io_ctx->kvd = this;
@@ -288,16 +286,15 @@ namespace kvssd {
     io_ctx->cb = callback;
     io_ctx->args = args;
 
-    Async_get_context *get_ctx = new Async_get_context(this, io_ctx->vbuf, io_ctx->vbuf_size, io_ctx);
+    Async_sd_get_context *get_ctx = new Async_sd_get_context(this, io_ctx->vbuf, io_ctx->vbuf_size, io_ctx);
 
     return kv_get_async(key, kv_append_async_callback, get_ctx);
 
     RecordTick(statistics, IO_APPEND);
     RecordTick(statistics, IO_APP_BYTES, val->size());
-    // stats_.num_append.fetch_add(1, std::memory_order_relaxed);
   }
 
-  kvs_result KVSSD::kv_get_oneshot(const Slice *key, char* vbuf, int vlen) {
+  kvs_result KVSSD_SD::kv_get_oneshot(const Slice *key, char* vbuf, int vlen) {
     // vbuf already allocated, read in 1 I/O
     const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size() };
     kvs_value kvsvalue = { vbuf, vlen , 0, 0 /*offset */}; //prepare initial buffer
@@ -312,7 +309,7 @@ namespace kvssd {
     return ret;
   }
 
-  kvs_result KVSSD::kv_get(const Slice *key, char*& vbuf, int& vlen, int init_size /* default = INIT_GET_BUFF */) {
+  kvs_result KVSSD_SD::kv_get(const Slice *key, char*& vbuf, int& vlen, int init_size /* default = INIT_GET_BUFF */) {
     RecordTick(statistics, IO_GET);
     vbuf = (char *) malloc(init_size);
     const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size() };
@@ -343,17 +340,14 @@ namespace kvssd {
 
       RecordTick(statistics, IO_GET);
       RecordTick(statistics, IO_GET_BYTES, realloc_buf_size);
-      // stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
-      
     }
-    // stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_get] key: %s, size: %d\n",std::string(key->data(),key->size()).c_str(), vlen);
     return ret;
   }
   // ***** limitations *****
   // currently consider async get buffer size is large enough
   // in other words, async get can retrieve the whole value with 1 I/O.
-  kvs_result KVSSD::kv_get_async(const Slice *key, void (*callback)(void *), void *args) {
+  kvs_result KVSSD_SD::kv_get_async(const Slice *key, void (*callback)(void *), void *args) {
     sem_wait(&q_sem);
     char *vbuf = (char *) malloc(INIT_GET_BUFF);
     kvs_key *kvskey = (kvs_key*)malloc(sizeof(kvs_key));
@@ -377,12 +371,11 @@ namespace kvssd {
       exit(1);
     }
     RecordTick(statistics, IO_GET);
-    // stats_.num_retrieve.fetch_add(1, std::memory_order_relaxed);
     return KVS_SUCCESS;
   }
 
   // offset must be 64byte aligned (not support)
-  kvs_result KVSSD::kv_pget(const Slice *key, char*& vbuf, int count, int offset) {
+  kvs_result KVSSD_SD::kv_pget(const Slice *key, char*& vbuf, int count, int offset) {
     vbuf = (char *) malloc(count+64);
     const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size() };
     kvs_value kvsvalue = { vbuf, count , 0, offset /*offset */}; 
@@ -400,7 +393,7 @@ namespace kvssd {
     return ret;
   }
 
-  kvs_result KVSSD::kv_delete(const Slice *key) {
+  kvs_result KVSSD_SD::kv_delete(const Slice *key) {
     const kvs_key  kvskey = { (void *)key->data(), (uint8_t)key->size() };
     const kvs_delete_context del_ctx = { {false}, 0, 0};
     kvs_result ret = kvs_delete_tuple(cont_handle, &kvskey, &del_ctx);
@@ -410,12 +403,11 @@ namespace kvssd {
         exit(1);
     }
     RecordTick(statistics, IO_DEL);
-    // stats_.num_delete.fetch_add(1, std::memory_order_relaxed);
     //printf("[kv_delete] key: %s\n",std::string(key->data(),key->size()).c_str());
     return ret;
   }
 
-  kvs_result KVSSD::kv_delete_async(const Slice *key, void (*callback)(void *), void *args) {
+  kvs_result KVSSD_SD::kv_delete_async(const Slice *key, void (*callback)(void *), void *args) {
     sem_wait(&q_sem);
     kvs_key *kvskey = (kvs_key*)malloc(sizeof(kvs_key));
     kvskey->key = (void *)key->data();
@@ -430,11 +422,10 @@ namespace kvssd {
         exit(1);
     }
     RecordTick(statistics, IO_DEL);
-    // stats_.num_delete.fetch_add(1, std::memory_order_relaxed);
     return ret;
   }
 
-  kvs_result KVSSD::kv_scan_keys(std::vector<std::string>& keys, int buf_size) {
+  kvs_result KVSSD_SD::kv_scan_keys(std::vector<std::string>& keys, int buf_size) {
     struct iterator_info *iter_info = (struct iterator_info *)malloc(sizeof(struct iterator_info));
     iter_info->g_iter_mode.iter_type = KVS_ITERATOR_KEY;
     
@@ -513,7 +504,7 @@ namespace kvssd {
   }
 
 
-  bool KVSSD::kv_iter_open(kv_iter *iter) {
+  bool KVSSD_SD::kv_iter_open(kv_iter *iter) {
     /* Open iterator */
     kvs_iterator_context iter_ctx_open;
     iter_ctx_open.option = iter->iter_info->g_iter_mode;
@@ -532,9 +523,9 @@ namespace kvssd {
       
   }
 
-  int KVSSD::kv_iter::get_num_entries () {return iter_info->iter_list.num_entries;}
+  int KVSSD_SD::kv_iter::get_num_entries () {return iter_info->iter_list.num_entries;}
 
-  KVSSD::kv_iter::kv_iter (int buf_size):buf_size_(buf_size)  {
+  KVSSD_SD::kv_iter::kv_iter (int buf_size):buf_size_(buf_size)  {
     iter_info = (struct iterator_info *)malloc(sizeof(struct iterator_info));
     iter_info->g_iter_mode.iter_type = KVS_ITERATOR_KEY;
     iter_info->iter_list.size = buf_size;
@@ -542,7 +533,7 @@ namespace kvssd {
     iter_info->iter_list.it_list = (uint8_t*) buffer_;
   }
 
-  bool KVSSD::kv_iter_next(kv_iter *iter) {
+  bool KVSSD_SD::kv_iter_next(kv_iter *iter) {
     kvs_iterator_context iter_ctx_next;
     iter_ctx_next.option = iter->iter_info->g_iter_mode;
     iter_ctx_next.private1 = iter->iter_info;
@@ -565,7 +556,7 @@ namespace kvssd {
     }
   }
 
-  bool KVSSD::kv_iter_close(kv_iter *iter) {
+  bool KVSSD_SD::kv_iter_close(kv_iter *iter) {
     /* Close iterator */
     kvs_iterator_context iter_ctx_close;
     iter_ctx_close.private1 = NULL;
@@ -578,6 +569,245 @@ namespace kvssd {
     }
     
     if(iter->iter_info) free(iter->iter_info);
+    return true;
+  }
+
+  // KVMD
+
+  uint64_t key_hash (const Slice *key) {
+    return NPHash64(key->data(), key->size());
+  }
+
+  bool KVSSD_MD::kv_exist (const Slice *key) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_exist(key);
+  }
+
+  uint32_t KVSSD_MD::kv_get_size(const Slice *key) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_get_size(key);
+  }
+
+  kvs_result KVSSD_MD::kv_store(const Slice *key, const Slice *val) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_store(key, val);
+  }
+
+  kvs_result KVSSD_MD::kv_store_async(Slice *key, Slice *val, void (*callback)(void *), void *args) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_store_async(key, val, callback, args);
+  }
+
+  kvs_result KVSSD_MD::kv_append(const Slice *key, const Slice *val) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_append(key, val);
+  }
+
+  kvs_result KVSSD_MD::kv_append_async(const Slice *key, const Slice *val, void (*callback)(void *), void *args) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_append_async(key, val, callback, args);
+  }
+
+  kvs_result KVSSD_MD::kv_get(const Slice *key, char*& vbuf, int& vlen, int init_size /* default = INIT_GET_BUFF */) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_get(key, vbuf, vlen, init_size);
+  }
+  // ***** limitations *****
+  // currently consider async get buffer size is large enough
+  // in other words, async get can retrieve the whole value with 1 I/O.
+  kvs_result KVSSD_MD::kv_get_async(const Slice *key, void (*callback)(void *), void *args) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_get_async(key, callback, args);
+  }
+
+  // offset must be 64byte aligned (not support)
+  kvs_result KVSSD_MD::kv_pget(const Slice *key, char*& vbuf, int count, int offset) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_pget(key, vbuf, count, offset);
+  }
+
+  kvs_result KVSSD_MD::kv_delete(const Slice *key) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_delete(key);
+  }
+
+  kvs_result KVSSD_MD::kv_delete_async(const Slice *key, void (*callback)(void *), void *args) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_delete_async(key, callback, args);
+  }
+
+  kvs_result KVSSD_MD::kv_scan_keys(std::vector<std::string>& keys, int buf_size) {
+    /* open iterator on each device */
+    KVSSD_SD::kv_iter **iters = new KVSSD_SD::kv_iter*[dev_num_];
+    for (int i = 0; i < dev_num_; i++) {
+      iters[i] = new KVSSD_SD::kv_iter(buf_size);
+      if (dev_list_[i]->kv_iter_open(iters[i]) == false) {
+        exit(-1); // simply exit program
+      }
+    }
+
+      
+    /* Do iteration on each device one by one */
+
+    for (int i = 0; i < dev_num_; i++) {
+      while(1) {
+        bool iter_cont = dev_list_[i]->kv_iter_next(iters[i]);
+        uint8_t *it_buffer = iters[i]->buffer_;
+        uint32_t key_size = 0;
+          int iter_num_entries = iters[i]->get_num_entries();
+          for(int i = 0;i < iter_num_entries; i++) {
+            // get key size
+            key_size = *((unsigned int*)it_buffer);
+            it_buffer += sizeof(unsigned int);
+
+            keys.push_back(std::string((char*)it_buffer, key_size));
+            
+            it_buffer += key_size;
+          }
+          if (!iter_cont) break; // finish iteration
+      }
+    }
+
+    /* Close iterator */
+    for (int i = 0; i < dev_num_; i++) {
+      if (dev_list_[i]->kv_iter_close(iters[i]) == false) {
+        exit(-1); // simply exit program
+      }
+      delete iters[i];
+    }
+    delete iters;
+    return KVS_SUCCESS;
+  }
+
+
+  bool KVSSD_MD::kv_iter_open(kv_iter *iter) {
+    /* Open iterator */
+    iter->iters_ = new KVSSD_SD::kv_iter*[dev_num_];
+    for (int i = 0; i < dev_num_; i++) {
+      iter->iters_[i] = new KVSSD_SD::kv_iter(iter->buf_size_);
+      dev_list_[i]->kv_iter_open(iter->iters_[i]);
+    }
+    // allocate another buffer to contain internal buffer for each dev iterator
+    iter->buffer_ = (uint8_t*) kvs_malloc(iter->buf_size_*dev_num_, 4096);
+  }
+
+  int KVSSD_MD::kv_iter::get_num_entries () {
+    return buf_entries_;
+  }
+
+  KVSSD_MD::kv_iter::kv_iter (int buf_size):buf_size_(buf_size)  {}
+
+  bool KVSSD_MD::kv_iter_next(kv_iter *iter) {
+    iter->buf_entries_ = 0;
+    uint8_t *buffer = iter->buffer_;
+    for (int i = 0; i < dev_num_; i++) {
+      if (dev_list_[i]->kv_iter_next(iter->iters_[i]) == false) {
+        return false;
+      }
+
+      // copy buffers
+      memcpy(buffer, iter->iters_[i]->buffer_, iter->buf_size_);
+      buffer += iter->buf_size_;
+      iter->buf_entries_ += iter->get_num_entries();
+    }
+    return true;
+  }
+
+  bool KVSSD_MD::kv_iter_close(kv_iter *iter) {
+    /* Close iterator */
+    for (int i = 0; i < dev_num_; i++) {
+      dev_list_[i]->kv_iter_close(iter->iters_[i]);
+      delete iter->iters_[i];
+    }
+    delete iter->iters_;
+    return true;
+  }
+
+  // KVSSD
+
+  bool KVSSD::kv_exist (const Slice *key) {
+    return dev_num_ == 1 ? dev_sd_->kv_exist(key) : dev_md_->kv_exist(key);
+  }
+
+  uint32_t KVSSD::kv_get_size(const Slice *key) {
+    return dev_num_ == 1 ? dev_sd_->kv_get_size(key) : dev_md_->kv_get_size(key);
+  }
+
+  kvs_result KVSSD::kv_store(const Slice *key, const Slice *val) {
+    return dev_num_ == 1 ? dev_sd_->kv_store(key, val) : dev_md_->kv_store(key, val);
+  }
+
+  kvs_result KVSSD::kv_store_async(Slice *key, Slice *val, void (*callback)(void *), void *args) {
+    
+    return dev_num_ == 1 ? dev_sd_->kv_store_async(key, val, callback, args) : dev_md_->kv_store_async(key, val, callback, args);
+  }
+
+  kvs_result KVSSD::kv_append(const Slice *key, const Slice *val) {
+    return dev_num_ == 1 ? dev_sd_->kv_append(key, val) : dev_md_->kv_append(key, val);
+  }
+
+  kvs_result KVSSD::kv_append_async(const Slice *key, const Slice *val, void (*callback)(void *), void *args) {
+    return dev_num_ == 1 ? dev_sd_->kv_append_async(key, val, callback, args) : dev_md_->kv_append_async(key, val, callback, args);
+  }
+
+  kvs_result KVSSD::kv_get(const Slice *key, char*& vbuf, int& vlen, int init_size /* default = INIT_GET_BUFF */) {
+    return dev_num_ == 1 ? dev_sd_->kv_get(key, vbuf, vlen, init_size) : dev_md_->kv_get(key, vbuf, vlen, init_size);
+  }
+  // ***** limitations *****
+  // currently consider async get buffer size is large enough
+  // in other words, async get can retrieve the whole value with 1 I/O.
+  kvs_result KVSSD::kv_get_async(const Slice *key, void (*callback)(void *), void *args) {
+    return dev_num_ == 1 ? dev_sd_->kv_get_async(key, callback, args) : dev_md_->kv_get_async(key, callback, args);
+  }
+
+  // offset must be 64byte aligned (not support)
+  kvs_result KVSSD::kv_pget(const Slice *key, char*& vbuf, int count, int offset) {
+    return dev_num_ == 1 ? dev_sd_->kv_pget(key, vbuf, count, offset) : dev_md_->kv_pget(key, vbuf, count, offset);
+  }
+
+  kvs_result KVSSD::kv_delete(const Slice *key) {
+    return dev_num_ == 1 ? dev_sd_->kv_delete(key) : dev_md_->kv_delete(key);
+  }
+
+  kvs_result KVSSD::kv_delete_async(const Slice *key, void (*callback)(void *), void *args) {
+    return dev_num_ == 1 ? dev_sd_->kv_delete_async(key, callback, args) : dev_md_->kv_delete_async(key, callback, args);
+  }
+
+  kvs_result KVSSD::kv_scan_keys(std::vector<std::string>& keys, int buf_size) {
+    return dev_num_ == 1 ? dev_sd_->kv_scan_keys(keys, buf_size) : dev_md_->kv_scan_keys(keys, buf_size);
+  }
+
+
+  bool KVSSD::kv_iter_open(kv_iter *iter) {
+    iter->dev_type_ = dev_num_ == 1 ? 1 : dev_num_;
+    if (iter->dev_type_ == 1) {
+      iter->iter_sd_ = new KVSSD_SD::kv_iter(iter->buf_size_);
+      iter->iter_md_ = NULL;
+    }
+    else {
+      iter->iter_sd_ = NULL;
+      iter->iter_md_ = new KVSSD_MD::kv_iter(iter->buf_size_);
+    }
+  }
+
+  int KVSSD::kv_iter::get_num_entries () {
+    return dev_type_ == 1 ? iter_sd_->get_num_entries() : iter_md_->get_num_entries();
+  }
+  uint8_t* KVSSD::kv_iter::get_buffer () {
+    return dev_type_ == 1 ? iter_sd_->buffer_ : iter_md_->buffer_;
+  }
+
+  KVSSD::kv_iter::kv_iter (int buf_size):buf_size_(buf_size)  {}
+
+  bool KVSSD::kv_iter_next(kv_iter *iter) {
+    if(iter->dev_type_ == 1) dev_sd_->kv_iter_next(iter->iter_sd_);
+    else dev_md_->kv_iter_next(iter->iter_md_);
+    return true;
+  }
+
+  bool KVSSD::kv_iter_close(kv_iter *iter) {
+    if(iter->dev_type_ == 1) dev_sd_->kv_iter_close(iter->iter_sd_);
+    else dev_md_->kv_iter_close(iter->iter_md_);
     return true;
   }
 } // end namespace

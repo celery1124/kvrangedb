@@ -22,7 +22,7 @@ SRCS=$(DB_SRCS) $(KVBTREE_SRCS) $(BASE_SRCS) $(INMEM_SRCS) $(UTIL_SRCS)
 all: kvssd leveldb rocksdb kvrangedb
 
 kvssd:
-	$(CC) -shared -o $(HOME)/libs/libkvssd.so $(INCLUDES) $(KVSSD_SRCS) -L$(HOME)/libs -Wl,-rpath,$(HOME)/libs -lkvapi -lnuma $(CXXFLAG)
+	$(CC) -shared -o $(HOME)/libs/libkvssd.so $(INCLUDES) $(KVSSD_SRCS) $(HOME)/src/hash.cc -L$(HOME)/libs -Wl,-rpath,$(HOME)/libs -lkvapi -lnuma $(CXXFLAG)
 
 rocksdb:
 	make -C $(HOME)/src/rocksdb/ shared_lib -j8

@@ -37,7 +37,7 @@ void BaseOrder::Iterator::Seek(Slice *key) {
     auto wcts = std::chrono::system_clock::now();
     bool iter_cont = base_->kvd_->kv_iter_next(KVIter_);
     wctduration += (std::chrono::system_clock::now() - wcts);
-    uint8_t *it_buffer = KVIter_->buffer_;
+    uint8_t *it_buffer = KVIter_->get_buffer();
     uint32_t key_size = 0;
       int iter_num_entries = KVIter_->get_num_entries();
       for(int i = 0;i < iter_num_entries; i++) {
