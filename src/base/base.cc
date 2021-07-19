@@ -10,8 +10,9 @@
 
 namespace base {
 
-BaseOrder::Iterator::Iterator (BaseOrder *base, int scan_len) 
+BaseOrder::Iterator::Iterator (BaseOrder *base, int scan_len, Slice *upper_key) 
   : scan_len_(scan_len), base_(base), ordered_keys_(custom_cmp(base->cmp_)) {
+    upper_key_ = std::string(upper_key->data(), upper_key->size());
   // sanctity check
   if (scan_len_ <= 0) scan_len_ = 1;
   KVIter_ = new kvssd::KVSSD::kv_iter();
@@ -46,8 +47,9 @@ void BaseOrder::Iterator::Seek(Slice *key) {
 
         std::string curr_key_str((char*)it_buffer, key_size);
         Slice curr_key(curr_key_str);
+        Slice upper_key(upper_key_);
         // filter out keys not in range
-        if (base_->cmp_->Compare(curr_key, *key) >= 0) {
+        if (base_->cmp_->Compare(curr_key, *key) >= 0 && base_->cmp_->Compare(curr_key, upper_key) < 0) {
           ordered_keys_.insert(curr_key_str);
           if (ordered_keys_.size() > scan_len_) { //remove last 
             auto last_it = --ordered_keys_.end();
@@ -78,8 +80,8 @@ Slice BaseOrder::Iterator::key() {
     return *it_;
 }
 
-BaseOrder::Iterator* BaseOrder::NewIterator(int scan_len) {
-    return new Iterator(this, scan_len);
+BaseOrder::Iterator* BaseOrder::NewIterator(int scan_len, Slice *upper_key) {
+    return new Iterator(this, scan_len, upper_key);
 }
 
 } // end namespace base
