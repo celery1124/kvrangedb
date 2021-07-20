@@ -1111,7 +1111,7 @@ int main(int argc, char** argv) {
       exit(1);
     }
   }
-  kvssd::KVSSD* kvd = new kvssd::KVSSD("/dev/kvemul");
+  kvssd::KVSSD* kvd = new kvssd::KVSSD("/dev/kvemul", nullptr);
   leveldb::g_env = leveldb::NewKVEnv(leveldb::Env::Default(), kvd);
 
   // Choose a location for the test database if none given with --db=<path>
