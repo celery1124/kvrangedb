@@ -45,7 +45,8 @@ public:
 class IDXIteratorBase: public IDXIterator {
 public:
   IDXIteratorBase(base::BaseOrder *base, const ReadOptions& options) : base_(base) {
-    it_ = base_->NewIterator(options.scan_length);
+    base::Slice upper_key(options.upper_key->data(), options.upper_key->size());
+    it_ = base_->NewIterator(options.scan_length, &upper_key);
   }
   ~IDXIteratorBase() { 
     delete it_; 
