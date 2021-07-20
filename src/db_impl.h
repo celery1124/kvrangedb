@@ -48,7 +48,6 @@ public:
 };
 
 struct packKVEntry {
-  uint64_t seq;
   int size;
   std::string key;
   std::string value;
@@ -127,6 +126,12 @@ private:
   // I/O request conter (read only for now)
   std::atomic<int64_t> inflight_io_count_;
 
+  // Total records counter
+  std::atomic<int64_t> total_record_count_;
+  std::atomic<int64_t> packed_record_count_;
+  std::atomic<bool> bg_compact_shutdown_;
+  std::thread *bg_compact_thread_;
+
   void processQ(int id);
   void save_meta() {
     std::string meta;
@@ -203,6 +208,7 @@ private:
 
   void ManualCompaction();
   void BGCompaction();
+  void DoBGCompact(std::vector<std::string>* klist, int offset, int size);
   void BuildBloomFilter();
   void BuildRangeFilter();
 

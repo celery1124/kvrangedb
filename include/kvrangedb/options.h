@@ -331,12 +331,16 @@ struct WriteOptions {
   // Update existing record
   // Default: false
   bool update;
+  // Write tier, 0-auto, 1-fast, 2-slow
+  // Default: auto
+  int tier;
 
   WriteOptions()
       : sync(false),
         batchIDXWrite(false),
         batchIDXSize(8),
-        update(false) {
+        update(false),
+        tier(0) {
   }
 };
 

@@ -49,9 +49,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   sequence_(0),
   pack_threads_num(options.packThreadsNum),
   hot_keys_training_cnt_(0),
-  inflight_io_count_(0),
-  total_record_count_(0),
-  packed_record_count_(0) {
+  inflight_io_count_(0) {
   kvd_ = new kvssd::KVSSD(dbname.c_str(), options_.statistics.get());
   for (int i = 0; i < options.indexNum; i++) {
     std::string indexName = std::to_string(i);
@@ -95,17 +93,6 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
     printf("Max Pack Size: %d\n", options_.packSize);
   } else {
     printf("Background packing threads disabled\n");
-  }
-
-  // initialize BG compaction thread
-  bg_compact_shutdown_.store(false, std::memory_order_relaxed);
-  
-  if (options_.bgCompaction) {
-    bg_compact_thread_ = new std::thread(&DBImpl::BGCompaction, this);
-    printf("Starting background compaction thread\n");
-  }
-  else {
-    printf("Background compaction thread disabled\n");
   }
 
   // initialize in-memory data cache
@@ -180,12 +167,6 @@ DBImpl::~DBImpl() {
     delete [] pack_threads_;
     delete [] thread_m_;
     delete [] shutdown_;
-  }
-
-  // shutdown BG compaction thread
-  if (options_.bgCompaction) {
-    bg_compact_shutdown_.store(true, std::memory_order_relaxed);
-    bg_compact_thread_->join();
   }
 
   // save meta (sequence number)
@@ -372,7 +353,6 @@ Status DBImpl::Put(const WriteOptions& options,
                      const Slice& key,
                      const Slice& value) {
   RecordTick(options_.statistics.get(), REQ_PUT);
-  total_record_count_.fetch_add(1, std::memory_order_relaxed);
   //printf("KVRangeDB Put %s\n", std::string(key.data(), key.size()).c_str());
 
   std::string skey(key.data(), key.size());
@@ -437,7 +417,6 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
   erase_cache(skey);
 
   RecordTick(options_.statistics.get(), REQ_DEL);
-  total_record_count_.fetch_sub(1, std::memory_order_relaxed);
 
   kvssd::Slice del_key(key.data(), key.size());
 	kvd_->kv_delete(&del_key);
@@ -522,7 +501,7 @@ Status DBImpl::Get(const ReadOptions& options,
 
   bool possible_packed = true;
   bool possible_unpacked = true;
-  if (options_.manualCompaction && hot_keys_training_cnt_.load() < options_.hotKeyTrainingNum) { // capture hot query
+  if (options_.manualCompaction || options_.bgCompaction && hot_keys_training_cnt_.load() < options_.hotKeyTrainingNum) { // capture hot query
     {
       std::unique_lock<std::mutex> lock(seq_mutex_);
       hot_keys_[std::string(key.data(), key.size())]++;
@@ -710,224 +689,39 @@ static void on_compact_put_complete (void* args) {
 }
 
 /* IN-Progress */
-// void DBImpl::BGCompaction() {
-//   const auto timeWindow = std::chrono::seconds(options_.bgCompactionInterval);
-//   int scanLen = options_.bgCompactionScanLength;
-  
-//   bool wrap_around = true;
-//   std::string next_seek_key;
-//   while(true) {
-//     auto start = std::chrono::steady_clock::now();
-//     const ReadOptions options;
-//     IDXIterator *it_ = key_idx_[0]->NewIterator(options);
-//     // heavy lifting
-//     if (wrap_around) {
-//       it_->SeekToFirst();
-//       wrap_around = false;
-//     }
-//     else {
-//       it_->Seek(next_seek_key);
-//     }
-
-//     for (int i = 0; i < scanLen; i++) {
-//       if (!it_->Valid()) {
-//         // reach the end of the index
-//         wrap_around = true;
-//         next_seek_key = "";
-//       }
-      
-//       it_->Next();
-//     }
-//     if (!wrap_around) {
-//       Slice next_seek_key_slice = it_->key();
-//       next_seek_key = std::string(next_seek_key_slice.data(), next_seek_key_slice.size());
-//     }
-//     delete it_;
-
-//     auto end = std::chrono::steady_clock::now();
-//     auto elapsed = end - start;
-
-//     auto timeToWait = timeWindow - elapsed;
-//     if(timeToWait > std::chrono::milliseconds::zero())
-//     {
-//         std::this_thread::sleep_for(timeToWait);
-//     }
-
-//   }
-
-// }
-
-#define COMPACT_THD 16
-#define COMPACT_SIZE 16
-#define COMPACT_THRES 10000000 // 10 Million
-#define COMPACT_THRES_GUARD 100000 // 100 K
-
-typedef struct {
-  int klen;
-  char *kdata;
-  int vlen;
-  char *vdata;
-} kv_record;
-
-static void do_pack_KVs (uint64_t seq, std::vector<kv_record>& pack_list, 
-        kvssd::Slice& pack_key, kvssd::Slice& pack_val, IDXWriteBatch *index_batch) {
-    int pack_size = 0;
-    for (int i = 0; i < pack_list.size(); i++) {
-      pack_size = pack_size + (pack_list[i].klen+pack_list[i].vlen+sizeof(uint8_t)+sizeof(uint32_t));
-    }
-    char* pack_key_str = (char*) malloc(sizeof(uint64_t));
-    char* pack_val_str = (char*) malloc(pack_size);
-    // key
-    *((uint64_t*)pack_key_str) = seq;
-    pack_key = kvssd::Slice (pack_key_str, sizeof(uint64_t));
-    Slice pkey(pack_key_str, sizeof(uint64_t));
-
-    // value
-    char *p = pack_val_str;
-    for (int i = 0; i < pack_list.size(); i++) {
-      Slice lkey(pack_list[i].kdata, pack_list[i].klen);
-      index_batch->Put(lkey, pkey);
-
-      *((uint8_t*)p) = pack_list[i].klen;
-      p += sizeof(uint8_t);
-      memcpy(p, pack_list[i].kdata, pack_list[i].klen);
-      p += pack_list[i].klen;
-      *((uint32_t*)p) = pack_list[i].vlen;
-      p += sizeof(uint32_t);
-      memcpy(p, pack_list[i].vdata, pack_list[i].vlen);
-      p += pack_list[i].vlen;
-
-    }
-    assert((int)(p -pack_val_str) == pack_size);
-    pack_val = kvssd::Slice (pack_val_str, pack_size);
-
-    return;
-};
-
-void DBImpl::DoBGCompact(std::vector<std::string>* klist, int offset, int size) {
-  std::vector<kv_record> pack_list;
-  int pack_cnt = 0;
-  for (int i = offset; i < offset+size; i++) {
-    kvssd::Slice get_key((*klist)[i]);
-    kv_record item;
-    item.klen = (*klist)[i].size();
-    item.kdata = (char*)((*klist)[i].data());
-    int ret = kvd_->kv_get(&get_key, item.vdata, item.vlen);
-    pack_list.push_back(item);
-
-    if (++pack_cnt == COMPACT_SIZE || i == (offset+size-1)) {
-      // create seq number
-      uint64_t seq;
-      {
-          std::unique_lock<std::mutex> lock(seq_mutex_);
-          seq = sequence_++;
-      }
-      // do packing
-      kvssd::Slice pack_key;
-      kvssd::Slice pack_val;
-      IDXWriteBatch *index_batch ;
-      if (options_.indexType == LSM) {
-        index_batch = NewIDXWriteBatchLSM();
-      }
-      else if (options_.indexType == LSMOPT) {
-        index_batch = NewIDXWriteBatchLSM();
-      }
-      else if (options_.indexType == ROCKS) {
-        index_batch = NewIDXWriteBatchRocks();
-      }
-      else if (options_.indexType == BTREE) {
-        index_batch = NewIDXWriteBatchBTree();
-      }
-      else if (options_.indexType == BASE) {
-        index_batch = NewIDXWriteBatchBase();
-      }
-      else if (options_.indexType == INMEM) {
-        index_batch = NewIDXWriteBatchInmem();
-      }
-
-      do_pack_KVs(seq, pack_list, pack_key, pack_val, index_batch);\
-
-      // sync write 1-data, 2-index
-      kvd_->kv_store(&pack_key, &pack_val);
-      key_idx_[0]->Write(index_batch); // pack only support single index tree
-      
-      // clean up
-      for (int i = 0; i < pack_list.size(); i++) {
-        kvssd::Slice del_key(pack_list[i].kdata, pack_list[i].klen);
-        kvd_->kv_delete(&del_key);
-        free(pack_list[i].vdata);
-      }
-      free((char*) pack_key.data());
-      free((char*) pack_val.data());
-      delete index_batch;
-
-      // reset pack list
-      pack_cnt = 0;
-      pack_list.clear();
-    }
-  }
-}
-
 void DBImpl::BGCompaction() {
   const auto timeWindow = std::chrono::seconds(options_.bgCompactionInterval);
+  int scanLen = options_.bgCompactionScanLength;
   
+  bool wrap_around = true;
   std::string next_seek_key;
-  const uint64_t pack_thres = COMPACT_THRES; 
-  std::thread *compact_thrd[COMPACT_THD]; // compact threads
-  while(bg_compact_shutdown_.load(std::memory_order_relaxed) != true) {
+  while(true) {
     auto start = std::chrono::steady_clock::now();
-
-    if (total_record_count_.load(std::memory_order_relaxed) - packed_record_count_.load(std::memory_order_relaxed) > (COMPACT_THRES + COMPACT_THRES_GUARD)) {
-      auto timeBGCStart = std::chrono::system_clock::now();
-      printf("start BG compacting, total_keys: %lu, compacted keys: %lu\n", 
-      total_record_count_.load(std::memory_order_relaxed), packed_record_count_.load(std::memory_order_relaxed));
-
-      int key_cnt = 0, last_key_cnt = 0;
-      std::vector<std::string> pack_key_list;
-      uint64_t pack_cnt = 0;
-      const ReadOptions rdopts;
-      
-      // scan keys for packing
-      IDXIterator *it_ = key_idx_[0]->NewIterator(rdopts);
-      if (next_seek_key.empty()) {
-        it_->SeekToFirst();
-      } else {
-        Slice seekKey(next_seek_key);
-        it_->Seek(seekKey);
-      }
-      while(it_->Valid() && pack_cnt++ < pack_thres) {
-        Slice lkey = it_->key();
-        std::string key(lkey.data(), lkey.size());
-        pack_key_list.push_back(key);
-        it_->Next();
-      }
-      // assign next compaction seek key
-      Slice lkey = it_->key();
-      next_seek_key = lkey.ToString();
-      delete it_;
-
-      // schedule threads for compaction
-      printf("BGCompact: total scan keys: %d, schedule threads to compact, next seek key: %s\n", pack_key_list.size(), next_seek_key.c_str());
-      int perThreadCnt = pack_key_list.size()/COMPACT_THD;
-      int offset = 0;
-      int size = 0;
-      for (int i = 0; i< COMPACT_THD; i++) {
-          if (i == COMPACT_THD-1) size = pack_key_list.size() - offset;
-          else size = perThreadCnt;
-          compact_thrd[i] = new std::thread(&DBImpl::DoBGCompact, this, &pack_key_list, offset, size);
-          offset += perThreadCnt;
-      }
-      for (int i = 0; i< COMPACT_THD; i++) {
-          compact_thrd[i]->join();
-          delete compact_thrd[i];
-      }
-      packed_record_count_.fetch_add(pack_key_list.size(), std::memory_order_relaxed);
-
-      auto timeBGCEnd = std::chrono::system_clock::now();
-      std::chrono::duration<double> BGCDuration = (timeBGCEnd - timeBGCStart);
-      printf("end BG compacting, total_keys: %lu, compacted keys: %lu, elapsed: %.3f (sec)\n", 
-      total_record_count_.load(std::memory_order_relaxed), packed_record_count_.load(std::memory_order_relaxed), BGCDuration.count());
+    const ReadOptions options;
+    IDXIterator *it_ = key_idx_[0]->NewIterator(options);
+    // heavy lifting
+    if (wrap_around) {
+      it_->SeekToFirst();
+      wrap_around = false;
     }
+    else {
+      it_->Seek(next_seek_key);
+    }
+
+    for (int i = 0; i < scanLen; i++) {
+      if (!it_->Valid()) {
+        // reach the end of the index
+        wrap_around = true;
+        next_seek_key = "";
+      }
+      
+      it_->Next();
+    }
+    if (!wrap_around) {
+      Slice next_seek_key_slice = it_->key();
+      next_seek_key = std::string(next_seek_key_slice.data(), next_seek_key_slice.size());
+    }
+    delete it_;
 
     auto end = std::chrono::steady_clock::now();
     auto elapsed = end - start;
