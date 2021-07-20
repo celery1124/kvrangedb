@@ -183,6 +183,10 @@ struct Options {
   // Default: -1 (no dump)
   int stats_dump_interval;
 
+  // Read only option (readonly can bypass cache)
+  // Default: false
+  bool readonly;
+
   Options() : comparator(BytewiseComparator()),
               indexType(LSM),
               cleanIndex(false),
@@ -216,7 +220,8 @@ struct Options {
               rfLevels(1),
               rfBitsPerLevel(1),
               statistics(nullptr),
-              stats_dump_interval(-1) {
+              stats_dump_interval(-1),
+              readonly(false) {
     // Load from environment variable
     char *env_p;
     if(env_p = std::getenv("INDEX_TYPE")) {

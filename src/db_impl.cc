@@ -109,10 +109,13 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   }
 
   // initialize in-memory data cache
-  if (options.dataCacheSize > 0)
+  if (options.dataCacheSize > 0) {
     cache_ = NewLRUCache((size_t)options.dataCacheSize << 20, 0);
-  else 
-    cache_ = NewLRUCache(1<<20, 0); // minimum in-memory cache (1MB) for get consistance
+  }
+  else {
+    if (options.readonly) cache_ = nullptr;
+    else cache_ = NewLRUCache(1<<20, 0); // minimum in-memory cache (1MB) for get consistance
+  }
 
   // initialize range filter
   if (options.rfType == HiBloom) {
