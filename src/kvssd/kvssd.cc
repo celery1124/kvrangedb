@@ -608,6 +608,11 @@ namespace kvssd {
     return dev_list_[dev_id]->kv_append_async(key, val, callback, args);
   }
 
+  kvs_result KVSSD_MD::kv_get_oneshot(const Slice *key, char* vbuf, int vlen) {
+    int dev_id = key_hash(key)%dev_num_;
+    return dev_list_[dev_id]->kv_get_oneshot(key, vbuf, vlen);
+  }
+
   kvs_result KVSSD_MD::kv_get(const Slice *key, char*& vbuf, int& vlen, int init_size /* default = INIT_GET_BUFF */) {
     int dev_id = key_hash(key)%dev_num_;
     return dev_list_[dev_id]->kv_get(key, vbuf, vlen, init_size);
@@ -748,6 +753,10 @@ namespace kvssd {
 
   kvs_result KVSSD::kv_append_async(const Slice *key, const Slice *val, void (*callback)(void *), void *args) {
     return dev_num_ == 1 ? dev_sd_->kv_append_async(key, val, callback, args) : dev_md_->kv_append_async(key, val, callback, args);
+  }
+
+  kvs_result KVSSD::kv_get_oneshot(const Slice *key, char* vbuf, int vlen) {
+    return dev_num_ == 1 ? dev_sd_->kv_get_oneshot(key, vbuf, vlen) : dev_md_->kv_get_oneshot(key, vbuf, vlen);
   }
 
   kvs_result KVSSD::kv_get(const Slice *key, char*& vbuf, int& vlen, int init_size /* default = INIT_GET_BUFF */) {
