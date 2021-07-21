@@ -30,5 +30,11 @@ ycsb_wisckey:
 ycsb_rocks:
 	$(CC) ycsb_rocks.cc $(ROCKS_LIB) -o ycsb_rocks $(ROCKS_INCLUDE) $(CXXFLAG)
 
+mtier_kv:
+	$(CC) mtier_kv.cc $(LIBS) -o mtier_kv $(INCLUDES) $(CXXFLAG)
+
+ts_mtier_kv:
+	$(CC) ts_mtier_kv.cc $(LIBS) -o ts_mtier_kv $(INCLUDES) $(CXXFLAG)
+
 clean:
 	rm -rf ts_bench_rocks ts_bench_kv
