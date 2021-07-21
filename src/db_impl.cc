@@ -114,7 +114,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   }
   else {
     if (options.readonly) cache_ = nullptr;
-    else cache_ = NewLRUCache(1<<20, 0); // minimum in-memory cache (1MB) for get consistance
+    else cache_ = NewLRUCache(1<<20, 16); // minimum in-memory cache (1MB) for write queue (get need to examine write Q before reaching device)
   }
 
   // initialize range filter
