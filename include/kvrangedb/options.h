@@ -339,13 +339,17 @@ struct WriteOptions {
   // Write tier, 0-auto, 1-fast, 2-slow
   // Default: auto
   int tier;
+  // Pack write ID (pack records with same ID in the window)
+  // Default: -1 (do not pac)
+  int64_t packID;
 
   WriteOptions()
       : sync(false),
         batchIDXWrite(false),
         batchIDXSize(8),
         update(false),
-        tier(0) {
+        tier(0),
+        packID(-1) {
   }
 };
 

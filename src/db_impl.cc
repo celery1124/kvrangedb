@@ -260,6 +260,42 @@ static void do_pack_KVs (uint64_t seq, std::vector<packKVEntry*>& kvs, int pack_
     return;
 };
 
+static void do_pack_KVs (std::vector<syncPackKVEntry>* kvs,
+        kvssd::Slice& pack_key, kvssd::Slice& pack_val, IDXWriteBatch *index_batch) {
+    int pack_size = 0;
+    for (int i = 0; i < kvs->size(); i++) {
+      pack_size += ((*kvs)[i].key.size() + (*kvs)[i].value.size());
+    }
+
+    char* pack_key_str = (char*) malloc(sizeof(uint64_t));
+    char* pack_val_str = (char*) malloc(pack_size);
+    // key
+    *((uint64_t*)pack_key_str) = (*kvs)[0].phyKey;
+    pack_key = kvssd::Slice (pack_key_str, sizeof(uint64_t));
+    Slice pkey(pack_key_str, sizeof(uint64_t));
+
+    // value
+    char *p = pack_val_str;
+    for (int i = 0; i < kvs->size(); i++) {
+      Slice lkey((*kvs)[i].key);
+      index_batch->Put(lkey, pkey);
+
+      *((uint8_t*)p) = (*kvs)[i].key.size();
+      p += sizeof(uint8_t);
+      memcpy(p, (*kvs)[i].key.data(), (*kvs)[i].key.size());
+      p += (*kvs)[i].key.size();
+      *((uint32_t*)p) = (*kvs)[i].value.size();
+      p += sizeof(uint32_t);
+      memcpy(p, (*kvs)[i].value.data(), (*kvs)[i].value.size());
+      p += (*kvs)[i].value.size();
+
+    }
+    assert((int)(p -pack_val_str) == pack_size);
+    pack_val = kvssd::Slice (pack_val_str, pack_size);
+
+    return;
+};
+
 static bool do_unpack_KVs (char *vbuf, int size, const Slice& lkey, std::string* lvalue) {
   char *p = vbuf;
   while ((p-vbuf) < size) {
@@ -303,10 +339,7 @@ void DBImpl::processQ(int id) {
     int pack_size = dequeue_bulk_timed(pack_q_, kvs, options_.maxPackNum, options_.packSize, options_.packDequeueTimeout);
     if (kvs.size()) {
       uint64_t seq;
-      {
-          std::unique_lock<std::mutex> lock(seq_mutex_);
-          seq = sequence_++;
-      }
+      seq = get_new_seq();
       
       // pack value
       kvssd::Slice pack_key;
@@ -394,6 +427,55 @@ Status DBImpl::Put(const WriteOptions& options,
     // insert to in-memory cache
     Cache::Handle* h = insert_cache(skey, value);
     release_cache(h);
+
+    // sync packing
+    if (options.packID >=0) {
+      uint64_t seq;
+      std::vector<syncPackKVEntry> *packGroup;
+      {
+        std::unique_lock<std::mutex> lock(sq_mutex_);
+        packGroup = &(sq_[options.packID]);
+      }
+        
+      if (packGroup->size() == 0) {
+        seq = get_new_seq();
+        packGroup->push_back(syncPackKVEntry(seq, key, value));
+      }
+      else {
+        packGroup->push_back(syncPackKVEntry((*packGroup)[0].phyKey, key, value));
+        if (packGroup->size() == options_.maxPackNum) {
+          kvssd::Slice pack_key;
+          kvssd::Slice pack_val;
+          IDXWriteBatch *index_batch ;
+          if (options_.indexType == LSM) {
+            index_batch = NewIDXWriteBatchLSM();
+          }
+          else if (options_.indexType == LSMOPT) {
+            index_batch = NewIDXWriteBatchLSM();
+          }
+          else if (options_.indexType == ROCKS) {
+            index_batch = NewIDXWriteBatchRocks();
+          }
+          else if (options_.indexType == BTREE) {
+            index_batch = NewIDXWriteBatchBTree();
+          }
+          else if (options_.indexType == BASE) {
+            index_batch = NewIDXWriteBatchBase();
+          }
+          else if (options_.indexType == INMEM) {
+            index_batch = NewIDXWriteBatchInmem();
+          }
+
+          do_pack_KVs(packGroup, pack_key, pack_val, index_batch);
+
+          // sync write 1-data, 2-index
+          kvd_->kv_store(&pack_key, &pack_val);
+          key_idx_[0]->Write(index_batch); // pack only support single index tree
+
+        }
+      }
+      return Status();
+    }
 
     // smaller values
     if (value.size() < options_.packThres && (!options_.packThreadsDisable)) {
@@ -821,10 +903,8 @@ void DBImpl::DoBGCompact(std::vector<std::string>* klist, int offset, int size) 
     if (++pack_cnt == COMPACT_SIZE || i == (offset+size-1)) {
       // create seq number
       uint64_t seq;
-      {
-          std::unique_lock<std::mutex> lock(seq_mutex_);
-          seq = sequence_++;
-      }
+      seq = get_new_seq();
+      
       // do packing
       kvssd::Slice pack_key;
       kvssd::Slice pack_val;
@@ -848,7 +928,7 @@ void DBImpl::DoBGCompact(std::vector<std::string>* klist, int offset, int size) 
         index_batch = NewIDXWriteBatchInmem();
       }
 
-      do_pack_KVs(seq, pack_list, pack_key, pack_val, index_batch);\
+      do_pack_KVs(seq, pack_list, pack_key, pack_val, index_batch);
 
       // sync write 1-data, 2-index
       kvd_->kv_store(&pack_key, &pack_val);

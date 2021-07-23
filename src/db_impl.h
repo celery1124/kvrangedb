@@ -59,6 +59,17 @@ struct packKVEntry {
               }
 };
 
+struct syncPackKVEntry {
+  uint64_t phyKey;
+  std::string key;
+  std::string value;
+  syncPackKVEntry(uint64_t _seq, const Slice& _key, const Slice& _val)
+              :phyKey(_seq) {
+                key = _key.ToString();
+                value = _val.ToString();
+              }
+};
+
 class CacheEntry { 
 public:
     char *val;
@@ -106,6 +117,11 @@ private:
   std::mutex seq_mutex_;
   moodycamel::BlockingConcurrentQueue<packKVEntry*> pack_q_;
   Monitor pack_q_wait_; // maintain queue depth
+
+  // sync packing queue (same packID always in the same thread)
+  std::mutex sq_mutex_;
+  std::unordered_map<int64_t, std::vector<syncPackKVEntry>> sq_;
+
   // consumer threads
   int pack_threads_num;
   std::thread **pack_threads_;
@@ -131,6 +147,20 @@ private:
   std::atomic<int64_t> packed_record_count_;
   std::atomic<bool> bg_compact_shutdown_;
   std::thread *bg_compact_thread_;
+
+  uint64_t get_new_seq() {
+    uint64_t seq; 
+    {
+        std::unique_lock<std::mutex> lock(seq_mutex_);
+        seq = sequence_++;
+    }   
+    return seq;
+  }
+
+  uint64_t get_curr_seq() {
+    return sequence_;
+  }
+
 
   void processQ(int id);
   void save_meta() {
