@@ -165,6 +165,9 @@ DBImpl::~DBImpl() {
     BuildBloomFilter();
   }
 
+  // flush sync queue
+  flush_sync_queue();
+
   // shutdown packing threads
   if (!options_.packThreadsDisable) {
     for (int i = 0; i < pack_threads_num; i++) { 
@@ -404,6 +407,58 @@ inline int get_phyKV_size(const Slice& key, const Slice& value) {
   return key.size()+value.size()+sizeof(uint8_t)+sizeof(uint32_t);
 }
 
+void DBImpl::flush_sync_queue() {
+  // Call when closing DB
+  // in single thread context
+  for (auto it = sq_.begin(); it != sq_.end(); ++it) {
+    if (it->second.size() == 1) { // no packing
+      kvssd::Slice put_key(it->second[0].key.data(), it->second[0].key.size());
+      kvssd::Slice put_val(it->second[0].value.data(), it->second[0].value.size());
+
+      // sync write 1-data, 2-index
+      kvd_->kv_store(&put_key, &put_val);
+      int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(it->second[0].key.data(), it->second[0].key.size(), 0)%options_.indexNum;
+      key_idx_[idx_id]->Put(it->second[0].key);
+    } else { // pack the rest
+      kvssd::Slice pack_key;
+      kvssd::Slice pack_val;
+      IDXWriteBatch *index_batch ;
+      std::vector<syncPackKVEntry> *packGroup = &(it->second);
+      if (options_.indexType == LSM) {
+        index_batch = NewIDXWriteBatchLSM();
+      }
+      else if (options_.indexType == LSMOPT) {
+        index_batch = NewIDXWriteBatchLSM();
+      }
+      else if (options_.indexType == ROCKS) {
+        index_batch = NewIDXWriteBatchRocks();
+      }
+      else if (options_.indexType == BTREE) {
+        index_batch = NewIDXWriteBatchBTree();
+      }
+      else if (options_.indexType == BASE) {
+        index_batch = NewIDXWriteBatchBase();
+      }
+      else if (options_.indexType == INMEM) {
+        index_batch = NewIDXWriteBatchInmem();
+      }
+
+      do_pack_KVs(packGroup, pack_key, pack_val, index_batch);
+
+      // sync write 1-data, 2-index
+      kvd_->kv_store(&pack_key, &pack_val);
+      key_idx_[0]->Write(index_batch); // pack only support single index tree
+
+      // clean up pack buffer
+      free((void*)pack_key.data());
+      free((void*)pack_val.data());
+    }
+
+    // no need to erase sync queue entry since we are closing
+  }
+
+}
+
 Status DBImpl::Put(const WriteOptions& options,
                      const Slice& key,
                      const Slice& value) {
@@ -471,6 +526,16 @@ Status DBImpl::Put(const WriteOptions& options,
           // sync write 1-data, 2-index
           kvd_->kv_store(&pack_key, &pack_val);
           key_idx_[0]->Write(index_batch); // pack only support single index tree
+
+          // clean up pack buffer
+          free((void*)pack_key.data());
+          free((void*)pack_val.data());
+
+          // erase group in the sync queue
+          {
+            std::unique_lock<std::mutex> lock(sq_mutex_);
+            sq_.erase (options.packID);  
+          }
 
         }
       }

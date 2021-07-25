@@ -161,6 +161,8 @@ private:
     return sequence_;
   }
 
+  // flush sync queue
+  void flush_sync_queue();
 
   void processQ(int id);
   void save_meta() {
