@@ -114,7 +114,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   }
   else {
     if (options.readonly) cache_ = nullptr;
-    else cache_ = NewLRUCache(1<<20, 16); // minimum in-memory cache (1MB) for write queue (get need to examine write Q before reaching device)
+    else cache_ = NewLRUCache(2<<20, 16); // minimum in-memory cache (2MB) for write queue (get need to examine write Q before reaching device)
   }
 
   // initialize range filter
@@ -593,10 +593,7 @@ Status DBImpl::Put(const WriteOptions& options,
             free((void*)pack_val.data());
 
             // erase group in the sync queue
-            {
-              std::unique_lock<std::mutex> lock(sq_mutex_[sq_shard_id]);
-              sq_[sq_shard_id].erase (options.packID);  
-            }
+            sq_[sq_shard_id].erase (options.packID);  
           }
         }
       }
