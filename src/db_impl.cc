@@ -410,51 +410,53 @@ inline int get_phyKV_size(const Slice& key, const Slice& value) {
 void DBImpl::flush_sync_queue() {
   // Call when closing DB
   // in single thread context
-  for (auto it = sq_.begin(); it != sq_.end(); ++it) {
-    if (it->second.size() == 1) { // no packing
-      kvssd::Slice put_key(it->second[0].key.data(), it->second[0].key.size());
-      kvssd::Slice put_val(it->second[0].value.data(), it->second[0].value.size());
+  for (int i = 0; i < SYNC_Q_SHARD; i++) {
+    
+    for (auto it = sq_[i].begin(); it != sq_[i].end(); ++it) {
+      if (it->second.size() == 1) { // no packing
+        kvssd::Slice put_key(it->second[0].key.data(), it->second[0].key.size());
+        kvssd::Slice put_val(it->second[0].value.data(), it->second[0].value.size());
 
-      // sync write 1-data, 2-index
-      kvd_->kv_store(&put_key, &put_val);
-      int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(it->second[0].key.data(), it->second[0].key.size(), 0)%options_.indexNum;
-      key_idx_[idx_id]->Put(it->second[0].key);
-    } else { // pack the rest
-      kvssd::Slice pack_key;
-      kvssd::Slice pack_val;
-      IDXWriteBatch *index_batch ;
-      std::vector<syncPackKVEntry> *packGroup = &(it->second);
-      if (options_.indexType == LSM) {
-        index_batch = NewIDXWriteBatchLSM();
-      }
-      else if (options_.indexType == LSMOPT) {
-        index_batch = NewIDXWriteBatchLSM();
-      }
-      else if (options_.indexType == ROCKS) {
-        index_batch = NewIDXWriteBatchRocks();
-      }
-      else if (options_.indexType == BTREE) {
-        index_batch = NewIDXWriteBatchBTree();
-      }
-      else if (options_.indexType == BASE) {
-        index_batch = NewIDXWriteBatchBase();
-      }
-      else if (options_.indexType == INMEM) {
-        index_batch = NewIDXWriteBatchInmem();
-      }
+        // sync write 1-data, 2-index
+        kvd_->kv_store(&put_key, &put_val);
+        int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(it->second[0].key.data(), it->second[0].key.size(), 0)%options_.indexNum;
+        key_idx_[idx_id]->Put(it->second[0].key);
+      } else { // pack the rest
+        kvssd::Slice pack_key;
+        kvssd::Slice pack_val;
+        IDXWriteBatch *index_batch ;
+        std::vector<syncPackKVEntry> *packGroup = &(it->second);
+        if (options_.indexType == LSM) {
+          index_batch = NewIDXWriteBatchLSM();
+        }
+        else if (options_.indexType == LSMOPT) {
+          index_batch = NewIDXWriteBatchLSM();
+        }
+        else if (options_.indexType == ROCKS) {
+          index_batch = NewIDXWriteBatchRocks();
+        }
+        else if (options_.indexType == BTREE) {
+          index_batch = NewIDXWriteBatchBTree();
+        }
+        else if (options_.indexType == BASE) {
+          index_batch = NewIDXWriteBatchBase();
+        }
+        else if (options_.indexType == INMEM) {
+          index_batch = NewIDXWriteBatchInmem();
+        }
 
-      do_pack_KVs(packGroup, pack_key, pack_val, index_batch);
+        do_pack_KVs(packGroup, pack_key, pack_val, index_batch);
 
-      // sync write 1-data, 2-index
-      kvd_->kv_store(&pack_key, &pack_val);
-      key_idx_[0]->Write(index_batch); // pack only support single index tree
+        // sync write 1-data, 2-index
+        kvd_->kv_store(&pack_key, &pack_val);
+        key_idx_[0]->Write(index_batch); // pack only support single index tree
 
-      // clean up pack buffer
-      free((void*)pack_key.data());
-      free((void*)pack_val.data());
+        // clean up pack buffer
+        free((void*)pack_key.data());
+        free((void*)pack_val.data());
+      }
+      // no need to erase sync queue entry since we are closing
     }
-
-    // no need to erase sync queue entry since we are closing
   }
 
 }
@@ -486,10 +488,52 @@ Status DBImpl::Put(const WriteOptions& options,
     // sync packing
     if (options.packID >=0) {
       uint64_t seq;
+      int sq_shard_id = options.packID%SYNC_Q_SHARD;
       std::vector<syncPackKVEntry> *packGroup;
       {
-        std::unique_lock<std::mutex> lock(sq_mutex_);
-        packGroup = &(sq_[options.packID]);
+        std::unique_lock<std::mutex> lock(sq_mutex_[sq_shard_id]);
+        packGroup = &(sq_[sq_shard_id][options.packID]);
+        int sq_entries = sq_[sq_shard_id].size();
+
+        // heavy lifting flush, require blocking
+        if (sq_entries >= SYNC_Q_FLUSH_THRES) { // 1, packID mono increase; 2, same thread context on same packID; 3, flush the smallest entry (group)
+          auto head = sq_[sq_shard_id].begin();
+          kvssd::Slice pack_key;
+          kvssd::Slice pack_val;
+          IDXWriteBatch *index_batch ;
+          if (options_.indexType == LSM) {
+            index_batch = NewIDXWriteBatchLSM();
+          }
+          else if (options_.indexType == LSMOPT) {
+            index_batch = NewIDXWriteBatchLSM();
+          }
+          else if (options_.indexType == ROCKS) {
+            index_batch = NewIDXWriteBatchRocks();
+          }
+          else if (options_.indexType == BTREE) {
+            index_batch = NewIDXWriteBatchBTree();
+          }
+          else if (options_.indexType == BASE) {
+            index_batch = NewIDXWriteBatchBase();
+          }
+          else if (options_.indexType == INMEM) {
+            index_batch = NewIDXWriteBatchInmem();
+          }
+
+          do_pack_KVs(&(head->second), pack_key, pack_val, index_batch);
+
+          // sync write 1-data, 2-index
+          kvd_->kv_store(&pack_key, &pack_val);
+          key_idx_[0]->Write(index_batch); // pack only support single index tree
+
+          // clean up pack buffer
+          free((void*)pack_key.data());
+          free((void*)pack_val.data());
+
+          // erase group in the sync queue
+          sq_[sq_shard_id].erase (head);  
+
+        }
       }
         
       if (packGroup->size() == 0) {
@@ -533,8 +577,8 @@ Status DBImpl::Put(const WriteOptions& options,
 
           // erase group in the sync queue
           {
-            std::unique_lock<std::mutex> lock(sq_mutex_);
-            sq_.erase (options.packID);  
+            std::unique_lock<std::mutex> lock(sq_mutex_[sq_shard_id]);
+            sq_[sq_shard_id].erase (options.packID);  
           }
 
         }

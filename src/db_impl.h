@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string>
+#include <map>
 #include <unordered_map>
 #include "kvrangedb/db.h"
 #include "kvssd/kvssd.h"
@@ -19,6 +20,8 @@
 #include "cache/cache.h"
 
 #define MAX_INDEX_NUM 8
+#define SYNC_Q_SHARD 8 
+#define SYNC_Q_FLUSH_THRES 4
 
 namespace kvrangedb {
 
@@ -119,8 +122,8 @@ private:
   Monitor pack_q_wait_; // maintain queue depth
 
   // sync packing queue (same packID always in the same thread)
-  std::mutex sq_mutex_;
-  std::unordered_map<int64_t, std::vector<syncPackKVEntry>> sq_;
+  std::mutex sq_mutex_[SYNC_Q_SHARD];
+  std::map<int64_t, std::vector<syncPackKVEntry>> sq_[SYNC_Q_SHARD];
 
   // consumer threads
   int pack_threads_num;
