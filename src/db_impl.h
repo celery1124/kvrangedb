@@ -21,7 +21,7 @@
 
 #define MAX_INDEX_NUM 8
 #define SYNC_Q_SHARD 8 
-#define SYNC_Q_FLUSH_THRES 4
+#define SYNC_Q_FLUSH_THRES 16
 
 namespace kvrangedb {
 
