@@ -444,6 +444,9 @@ void DBImpl::flush_sync_queue() {
         }
 
         do_pack_KVs(packGroup, pack_key, pack_val, index_batch);
+        RecordTick(options_.statistics.get(), PACK_CNT);
+        RecordTick(options_.statistics.get(), PACK_RECORD_CNT, head->second.size());
+        RecordTick(options_.statistics.get(), PACK_BYTES, pack_val.size());
 
         // sync write 1-data, 2-index
         kvd_->kv_store(&pack_key, &pack_val);
@@ -535,6 +538,10 @@ Status DBImpl::Put(const WriteOptions& options,
             }
 
             do_pack_KVs(&(head->second), pack_key, pack_val, index_batch);
+            RecordTick(options_.statistics.get(), PACK_CNT);
+            RecordTick(options_.statistics.get(), PACK_RECORD_CNT, head->second.size());
+            RecordTick(options_.statistics.get(), PACK_BYTES, pack_val.size());
+
 
             // sync write 1-data, 2-index
             kvd_->kv_store(&pack_key, &pack_val);
@@ -583,6 +590,9 @@ Status DBImpl::Put(const WriteOptions& options,
             }
 
             do_pack_KVs(packGroup, pack_key, pack_val, index_batch);
+            RecordTick(options_.statistics.get(), PACK_CNT);
+            RecordTick(options_.statistics.get(), PACK_RECORD_CNT, head->second.size());
+            RecordTick(options_.statistics.get(), PACK_BYTES, pack_val.size());
 
             // sync write 1-data, 2-index
             kvd_->kv_store(&pack_key, &pack_val);

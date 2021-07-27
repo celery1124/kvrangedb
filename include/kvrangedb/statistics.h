@@ -25,6 +25,10 @@ enum Tickers : uint32_t {
   REQ_DEL,
   REQ_SEEK,
   REQ_NEXT,
+  // Pack
+  PACK_CNT,
+  PACK_RECORD_CNT,
+  PACK_BYTES,
   // I/O
   IO_PUT,
   IO_GET,
@@ -58,6 +62,9 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {REQ_DEL, "req.delete"},
     {REQ_SEEK, "req.seek"},
     {REQ_NEXT, "req.next"},
+    {PACK_CNT, "pack.cnt"},
+    {PACK_RECORD_CNT, "pack.record.cnt"},
+    {PACK_BYTES, "pack.bytes"},
     {IO_PUT, "io.put"},
     {IO_GET, "io.get"},
     {IO_GET_NONE, "io.get.non-exist"},
