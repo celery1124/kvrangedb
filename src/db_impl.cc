@@ -544,10 +544,10 @@ Status DBImpl::Put(const WriteOptions& options,
             free((void*)pack_key.data());
             free((void*)pack_val.data());
 
-            // erase group in the sync queue
-            sq_[sq_shard_id].erase (head);  
             
           }
+          // erase group in the sync queue
+          sq_[sq_shard_id].erase (head);  
         }
    
         std::vector<syncPackKVEntry> *packGroup;
