@@ -114,7 +114,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   }
   else {
     if (options.readonly) cache_ = nullptr;
-    else cache_ = NewLRUCache(2<<20, 16); // minimum in-memory cache (2MB) for write queue (get need to examine write Q before reaching device)
+    else cache_ = NewLRUCache(4<<20, 16); // minimum in-memory cache (4MB) for write queue (get need to examine write Q before reaching device)
   }
 
   // initialize range filter
@@ -497,8 +497,8 @@ Status DBImpl::Put(const WriteOptions& options,
     // sync packing
     if (options.packID >=0) {
       uint64_t seq;
-      int sq_shard_id = hash64(options.packID)%SYNC_Q_SHARD;
-      // int sq_shard_id = options.packID%SYNC_Q_SHARD;
+      //int sq_shard_id = hash64(options.packID)%SYNC_Q_SHARD;
+      int sq_shard_id = options.packID%SYNC_Q_SHARD;
       {
         std::unique_lock<std::mutex> lock(sq_mutex_[sq_shard_id]);
         int sq_entries = sq_[sq_shard_id].size();
@@ -738,8 +738,6 @@ Status DBImpl::Get(const ReadOptions& options,
       return Status();
   }
 
-  bool possible_packed = true;
-  bool possible_unpacked = true;
   if (options_.manualCompaction && hot_keys_training_cnt_.load() < options_.hotKeyTrainingNum) { // capture hot query
     {
       std::unique_lock<std::mutex> lock(seq_mutex_);
@@ -749,7 +747,7 @@ Status DBImpl::Get(const ReadOptions& options,
     return Status();
   }
   
-  if (options.hint_packed == 2) { // small value
+  if (options.hint_packed == PACKED) { // definitely packed records
     // index lookup
     Slice lkey(key.data(), key.size());
     std::string pkey;
@@ -757,34 +755,27 @@ Status DBImpl::Get(const ReadOptions& options,
     if (!idx_found) { // definitely not found
       return Status().NotFound(Slice());
     }
-    else if (pkey.size() == 0) {
-      possible_packed = false;
-      goto fallover;
-    }
-    kvssd::Slice get_key(pkey);
-
-    char *vbuf;
-    int vlen;
-    int ret = kvd_->kv_get(&get_key, vbuf, vlen);
-
-    if (ret == 0) {
+    else if (pkey.size() == 0) { // not packing, normally should fall into this path
+      fprintf(stderr, "[kv_get] packed hint, key not packed, log_key: %s \n", key.data());
+      return Status().NotFound(Slice());
+      
+    } else { // packing with key translation
+      kvssd::Slice get_key(pkey);
+      char *vbuf;
+      int vlen;
+      int ret = kvd_->kv_get(&get_key, vbuf, vlen);
+      assert (ret == 0);
       bool found = do_unpack_KVs(vbuf, vlen, key, value);
-      if (found) {
-        free(vbuf);
+      assert (found == true);
+      free(vbuf);
 
-        // insert to in-memory cache
-        const Slice val(value->data(), value->size());
-        h = insert_cache(skey, val);
-        release_cache(h);
-        return Status();
-      }
-      else {
-        free(vbuf);
-        possible_packed = false;
-      }
+      // insert to in-memory cache
+      const Slice val(value->data(), value->size());
+      h = insert_cache(skey, val);
+      release_cache(h);
+      return Status();
     }
-  }                     
-  else if (options.hint_packed == 1) { // large value  
+  } else if (options.hint_packed == UNPACKED) { // definitely unpacked records
     kvssd::Slice get_key(key.data(), key.size());
     char *vbuf;
     int vlen;
@@ -800,16 +791,96 @@ Status DBImpl::Get(const ReadOptions& options,
     }
     else {
       free(vbuf);
-      possible_unpacked = false;
       return Status().NotFound(Slice());
+    }
+  } else if (options.hint_packed == LIKELY_PACKED) { // likely packed records
+    // index lookup
+    Slice lkey(key.data(), key.size());
+    std::string pkey;
+    bool idx_found = key_idx_[0]->Get(lkey, pkey);
+    if (!idx_found) { // definitely not found
+      return Status().NotFound(Slice());
+    }
+    else if (pkey.size() == 0) { // not packing
+      kvssd::Slice get_key(key.data(), key.size());
+      char *vbuf;
+      int vlen;
+      int ret = kvd_->kv_get(&get_key, vbuf, vlen);
+      if (ret == 0) {
+        value->append(vbuf, vlen);
+        free(vbuf);
+        // insert to in-memory cache
+        const Slice val(value->data(), value->size());
+        h = insert_cache(skey, val);
+        release_cache(h);
+        return Status();
+      } else {
+        free(vbuf);
+        return Status().NotFound(Slice());
+      }
+      
+    } else { // packing with key translation
+      kvssd::Slice get_key(pkey);
+      char *vbuf;
+      int vlen;
+      int ret = kvd_->kv_get(&get_key, vbuf, vlen);
+      assert(ret == 0);
+      bool found = do_unpack_KVs(vbuf, vlen, key, value);
+      assert(found == true);
+      free(vbuf);
+
+      // insert to in-memory cache
+      const Slice val(value->data(), value->size());
+      h = insert_cache(skey, val);
+      release_cache(h);
+      return Status();
+    }
+  } else if (options.hint_packed == LIKELY_UNPACKED) { // likely unpacked records
+    kvssd::Slice get_key(key.data(), key.size());
+    char *vbuf;
+    int vlen;
+    int ret = kvd_->kv_get(&get_key, vbuf, vlen);
+    if (ret == 0) {
+      value->append(vbuf, vlen);
+      free(vbuf);
+      // insert to in-memory cache
+      const Slice val(value->data(), value->size());
+      h = insert_cache(skey, val);
+      release_cache(h);
+      return Status();
+    }
+    else {
+      free(vbuf);
+      // index lookup
+      Slice lkey(key.data(), key.size());
+      std::string pkey;
+      bool idx_found = key_idx_[0]->Get(lkey, pkey);
+      if (!idx_found) { // definitely not found
+        return Status().NotFound(Slice());
+      } else {
+        assert(pkey.size() > 0);
+        kvssd::Slice get_key(pkey);
+        char *vbuf;
+        int vlen;
+        int ret = kvd_->kv_get(&get_key, vbuf, vlen);
+        assert(ret == 0);
+        bool found = do_unpack_KVs(vbuf, vlen, key, value);
+        assert(found == true);
+        free(vbuf);
+            
+        // insert to in-memory cache
+        const Slice val(value->data(), value->size());
+        h = insert_cache(skey, val);
+        release_cache(h);
+        return Status();
+      }
     }
   }
 
-  // auto (fall over)
-fallover:
-  // bloom filter check 
-  bool filter_found = do_check_filter(key);
-  if(possible_unpacked && filter_found) { // filter hit
+  // DEFAULT (fall over)
+  // bloom filter check for hot key
+  bool filter_found = CheckBloomFilter(key);
+  if(filter_found) { // filter hit, highly possible hot key
     kvssd::Slice get_key(key.data(), key.size());
     char *vbuf;
     int vlen;
@@ -825,65 +896,40 @@ fallover:
       release_cache(h);
       return Status();
     }
-    else {
+    else { // possible filter false positive
       free(vbuf);
+      // fall through
     }
+  } 
+  // filter miss, definitely not hot key
+  // index lookup
+  Slice lkey(key.data(), key.size());
+  std::string pkey;
+  bool idx_found = key_idx_[0]->Get(lkey, pkey);
+  if (!idx_found) { // definitely not found
+    return Status().NotFound(Slice());
   }
-
-  if (possible_packed) { // filter miss
-    // index lookup
-    Slice lkey(key.data(), key.size());
-    std::string pkey;
-    bool idx_found = key_idx_[0]->Get(lkey, pkey);
-    if (!idx_found) { // definitely not found
-      return Status().NotFound(Slice());
-    }
-    if(pkey.size() == 0) { // possible filter false positive
-      kvssd::Slice get_key(key.data(), key.size());
-      char *vbuf;
-      int vlen;
-      int ret = kvd_->kv_get(&get_key, vbuf, vlen);
-      if (ret == 0) {
-        value->append(vbuf, vlen);
-        free(vbuf);
-        
-        // insert to in-memory cache
-        const Slice val(value->data(), value->size());
-        h = insert_cache(skey, val);
-        release_cache(h);
-        return Status();
-      }
-      else {
-        free(vbuf);
-        return Status().NotFound(Slice());
-      }
-    }
+  if(pkey.size() == 0) { // not possible, since filter miss or logical key already checked
+    fprintf(stderr, "[kv_get] default hint, cold key not packed, log_key: %d\n", key.data());
+    return Status().NotFound(Slice());
+  } else { // read packed physical record
     kvssd::Slice get_key(pkey);
 
     char *vbuf;
     int vlen;
     int ret = kvd_->kv_get(&get_key, vbuf, vlen);
-
-    if (ret == 0) {
-      bool found = do_unpack_KVs(vbuf, vlen, key, value);
-      
-      if (found) {
-        free(vbuf);
+    assert(ret == 0);
+    bool found = do_unpack_KVs(vbuf, vlen, key, value);
+    assert(found == true);
+    free(vbuf);
         
-        // insert to in-memory cache
-        const Slice val(value->data(), value->size());
-        h = insert_cache(skey, val);
-        release_cache(h);
-        return Status();
-      }
-      else {
-        free(vbuf);
-        possible_packed = false;
-      }
-    }
+    // insert to in-memory cache
+    const Slice val(value->data(), value->size());
+    h = insert_cache(skey, val);
+    release_cache(h);
+    return Status();
   }
-  
-  return Status().NotFound(Slice());
+  // not reachable
 }
 
 Iterator* DBImpl::NewIterator(const ReadOptions& options) {

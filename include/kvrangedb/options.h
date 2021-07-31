@@ -296,6 +296,14 @@ struct Options {
   } 
 };
 
+enum ReadTypeHint {
+  DEFAULT = 0,
+  UNPACKED,
+  PACKED,
+  LIKELY_UNPACKED,
+  LIKELY_PACKED,
+};
+
 // Options that control read operations
 struct ReadOptions {
   // Define the upper key (Non-Inclusive) for range query
@@ -307,9 +315,9 @@ struct ReadOptions {
   int scan_length;
 
   // Potential user hint for the size of the value (packed or unpacked?)
-  // 0 -> auto, 1 -> unpacked, 2 -> packed
+  // 0 -> auto, 1 -> unpacked, 2 -> packed, 3 -> likely unpacked, 4 -> likely packed
   // Default: 0 (no hints)
-  int hint_packed;
+  ReadTypeHint hint_packed;
 
   // // Buffer size for base iterator in Bytes
   // // Default: 4MB
@@ -318,7 +326,7 @@ struct ReadOptions {
   ReadOptions()
       : upper_key(NULL),
         scan_length(1),
-        hint_packed(0) {
+        hint_packed(DEFAULT) {
   }
 };
 

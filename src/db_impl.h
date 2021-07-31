@@ -20,8 +20,8 @@
 #include "cache/cache.h"
 
 #define MAX_INDEX_NUM 8
-#define SYNC_Q_SHARD 8 
-#define SYNC_Q_FLUSH_THRES 16
+#define SYNC_Q_SHARD 16 
+#define SYNC_Q_FLUSH_THRES 8
 
 namespace kvrangedb {
 
@@ -229,14 +229,14 @@ private:
     return newDB;
   }
 
-  bool do_check_filter(const Slice& key) {
+  bool CheckBloomFilter(const Slice& key) {
     
     if (bf_.size()) {
       BloomFilter bf(options_.filterBitsPerKey);
       return bf.KeyMayMatch(key, bf_);
     }
-    else { // mo filter
-      return false;
+    else { // no filter
+      return true;
     }
     
   }
