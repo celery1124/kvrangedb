@@ -141,7 +141,11 @@ struct Options {
 
   // Bits per key for bloom filter
   // Default: 8
-  int filterBitsPerKey;
+  int bfBitsPerKey;
+
+  // Number of hot keys (bloom filter entries)
+  // Default: 0 (no bloom filter for hotkey)
+  int bfHotKeyNum;
 
   // In-memory data cache size
   // Default: 16 (MB)
@@ -210,7 +214,8 @@ struct Options {
               bgCompactionInterval(10),
               bgCompactionScanLength(100000),
               hotKeyTrainingNum(1000000),
-              filterBitsPerKey(8),
+              bfBitsPerKey(8),
+              bfHotKeyNum(0),
               dataCacheSize(16),
               rfType(NoFilter),
               rfNumKeys(1000000000),
@@ -348,7 +353,7 @@ struct WriteOptions {
   // Default: auto
   int tier;
   // Pack write ID (pack records with same ID in the window)
-  // Default: -1 (do not pac)
+  // Default: -1 (do not pack)
   int64_t packID;
 
   WriteOptions()

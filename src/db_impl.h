@@ -229,22 +229,14 @@ private:
     return newDB;
   }
 
-  bool CheckBloomFilter(const Slice& key) {
-    
-    if (bf_.size()) {
-      BloomFilter bf(options_.filterBitsPerKey);
-      return bf.KeyMayMatch(key, bf_);
-    }
-    else { // no filter
-      return true;
-    }
-    
-  }
+  bool CheckBloomFilter(const Slice& key);
+  void BuildBloomFilter();
+  void CreateEmtpyBloomFilter(int key_cnt);
+  void InsertEntryBloomFilter(const Slice& key);
 
   void ManualCompaction();
   void BGCompaction();
   void DoBGCompact(std::vector<std::string>* klist, int offset, int size);
-  void BuildBloomFilter();
   void BuildRangeFilter();
 
   // in-memory cache interface
