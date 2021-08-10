@@ -83,9 +83,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   // setup stats dump
   options_.statistics.get()->setStatsDump(options_.stats_dump_interval);
   // load meta (seq and bloom filter)
-  load_meta(sequence_);
+  bool newDB = load_meta(sequence_);
 
-  if (bf_.size() == 0 && options_.bfHotKeyNum > 0) {
+  if (!newDB && bf_.size() == 0 && options_.bfHotKeyNum > 0) {
     CreateEmtpyBloomFilter(options_.bfHotKeyNum);
   }
 
@@ -120,7 +120,7 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
   }
   else {
     if (options.readonly) cache_ = nullptr;
-    else cache_ = NewLRUCache(4<<20, 16); // minimum in-memory cache (4MB) for write queue (get need to examine write Q before reaching device)
+    else cache_ = NewLRUCache(16<<20, 16); // minimum in-memory cache (16MB) for write queue (get need to examine write Q before reaching device)
   }
 
   // initialize range filter

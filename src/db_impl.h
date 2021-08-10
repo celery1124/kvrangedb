@@ -176,7 +176,8 @@ private:
     kvd_->kv_store(&meta_key, &meta_val);
     printf("Finish saving KVRangeDB meta\n");
 
-    if (bf_.size() && options_.manualCompaction) {
+    // if (bf_.size() && options_.manualCompaction) {
+    if (bf_.size()) {
       const int MAX_V_SIZE = 2<<20; // 2MB max value size
       char *p = &bf_[0];
       int write_bytes = 0;

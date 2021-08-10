@@ -179,6 +179,7 @@ private:
   bool *valid_queue_;
   int prefetch_depth_;
   int queue_cur_;
+  std::unordered_map<std::string, Slice> readahead_cache_; // small cache for packed value
 
   // pack key range
   bool isPacked_;
@@ -189,6 +190,7 @@ private:
   Slice isPackedCurrVal_;
 
   void prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>& lkey_list, std::vector<Slice>& val_list);
+  void prefetch_value_readahead(std::vector<Slice>& key_list, std::vector<Slice>& lkey_list, std::vector<Slice>& val_list);
 };
 
 DBIterator::DBIterator(DBImpl *db, const ReadOptions &options) 
@@ -244,6 +246,30 @@ DBIterator::~DBIterator() {
   }
 }
 
+static bool do_unpack_KVs (char *vbuf, int size, const Slice& lkey, char*& lvalue, int& lvsize, std::unordered_map<std::string, Slice>& cache) {
+  char *p = vbuf;
+  while ((p-vbuf) < size) {
+    uint8_t key_len = *((uint8_t*)p);
+    p += sizeof(uint8_t);
+    Slice extract_key (p, key_len);
+    p += key_len;
+    uint32_t val_len = *((uint32_t*)p);
+    p += sizeof(uint32_t);
+    if (lkey.compare(extract_key) == 0) {
+      lvsize = val_len;
+      lvalue = (char *)malloc(val_len);
+      memcpy(lvalue, p, val_len);
+    } else {
+      char *val = (char *)malloc(val_len);
+      memcpy(val, p, val_len);
+      cache[extract_key.ToString()] = Slice(val, val_len);
+    }
+    
+    p += val_len;
+    assert ((p-vbuf) < size);
+  }
+  return true;
+}
 
 static bool do_unpack_KVs (char *vbuf, int size, const Slice& lkey, std::string* lvalue) {
   char *p = vbuf;
@@ -332,6 +358,73 @@ void DBIterator::prefetch_value(std::vector<Slice>& key_list, std::vector<Slice>
   delete [] vbuf_list;
   delete [] actual_vlen_list;
   delete ctx;
+}
+
+void DBIterator::prefetch_value_readahead(std::vector<Slice>& key_list, std::vector<Slice>& lkey_list, 
+                std::vector<Slice>& val_list) {
+  int prefetch_num = key_list.size();
+  int async_get_num = 0;
+  for (int i = 0; i < prefetch_num; i++) {
+    if (lkey_list[i].size() == 0)
+      async_get_num++;
+  }
+  char **vbuf_list = new char*[prefetch_num];
+  uint32_t *actual_vlen_list = new uint32_t[prefetch_num];
+  Monitor mon;
+  Prefetch_context *ctx = new Prefetch_context (async_get_num, &mon);
+  kvssd::Slice *async_get_key_list = new kvssd::Slice[prefetch_num];
+
+  if (async_get_num > 0) {
+    db_->inflight_io_count_.fetch_add(async_get_num, std::memory_order_relaxed);
+    for (int i = 0; i < prefetch_num; i++) {
+      if (lkey_list[i].size() == 0) { // hot key, no translation
+        async_get_key_list[i] = kvssd::Slice (key_list[i].data(), key_list[i].size());
+        kvssd::Async_get_context *io_ctx = new kvssd::Async_get_context (kvd_, vbuf_list[i], actual_vlen_list[i], (void *)ctx);
+        kvd_->kv_get_async(&async_get_key_list[i], on_prefetch_complete, (void*) io_ctx);  
+      }
+    }
+  }
+
+  for (int i = 0; i < prefetch_num; i++) {
+    if (lkey_list[i].size() > 0) { // packed key
+      std::string lkey = lkey_list[i].ToString();
+      if (readahead_cache_.find(lkey) == readahead_cache_.end()) { // need I/O
+        char *vbuf = NULL;
+        int actual_vlen;
+        
+        db_->inflight_io_count_.fetch_add(1, std::memory_order_relaxed); 
+        kvssd::Slice prefetch_key (key_list[i].data(), key_list[i].size());
+        kvd_->kv_get(&prefetch_key, vbuf, actual_vlen, 64<<10);
+        db_->inflight_io_count_.fetch_sub(1, std::memory_order_relaxed);
+        // push each logical record into readahead cache
+        Slice lkey_s(lkey_list[i]);
+        char *lvalue = nullptr;
+        int lvsize;
+        do_unpack_KVs(vbuf, actual_vlen, lkey_s, lvalue, lvsize, readahead_cache_);
+        val_list.push_back(Slice(lvalue, lvsize));
+        free(vbuf);
+      }
+      else { // already in cache (packed record read in single shot)
+        val_list.push_back(readahead_cache_[lkey]);
+      }
+    } 
+  }
+
+  if (async_get_num > 0) {
+    mon.wait();
+    db_->inflight_io_count_.fetch_sub(async_get_num, std::memory_order_relaxed);
+  
+    for (int i = 0; i < prefetch_num; i++) {
+      if (lkey_list[i].size() == 0)
+        val_list.push_back(Slice(vbuf_list[i], actual_vlen_list[i]));
+    }
+  }
+
+  // de-allocate resources
+  delete [] vbuf_list;
+  delete [] actual_vlen_list;
+  delete ctx;
+  delete [] async_get_key_list;
 }
 
 void DBIterator::SeekToFirst() { 
@@ -593,7 +686,8 @@ Slice DBIterator::value() {
         }
         else break;
       }
-      prefetch_value(key_list, lkey_list, val_list);
+      // prefetch_value(key_list, lkey_list, val_list);
+      prefetch_value_readahead(key_list, lkey_list, val_list);
       for (int i = 0; i < val_list.size(); i++) {
         val_queue_[i] = val_list[i];
       }
