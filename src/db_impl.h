@@ -234,6 +234,7 @@ private:
   void BuildBloomFilter();
   void CreateEmtpyBloomFilter(int key_cnt);
   void InsertEntryBloomFilter(const Slice& key);
+  void DeleteEntryBloomFilter(const Slice& key);
 
   void ManualCompaction();
   void BGCompaction();

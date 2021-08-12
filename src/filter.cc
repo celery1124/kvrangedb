@@ -408,6 +408,10 @@ const BloomFilter* NewBloomFilter(int bits_per_key) {
   return new BloomFilter(bits_per_key);
 }
 
+const CounterBloomFilter* NewCounterBloomFilter(int cells_per_key, int width) {
+  return new CounterBloomFilter(cells_per_key, width);
+}
+
 RangeFilter* NewHiBloomFilter(int bits_per_key, int bits_per_level, int levels, int exam_suffix_bits, int num_keys, int max_probes, Statistics *stats) {
   return new HiBloomFilter(bits_per_key, bits_per_level, levels, exam_suffix_bits, num_keys, max_probes, stats);
 }

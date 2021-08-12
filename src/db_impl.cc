@@ -418,10 +418,6 @@ void DBImpl::flush_sync_queue() {
     
     for (auto it = sq_[i].begin(); it != sq_[i].end(); ++it) {
       if (it->second.size() == 1) { // no packing
-        if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
-          Slice key(it->second[0].key);
-          InsertEntryBloomFilter(key);
-        }
         kvssd::Slice put_key(it->second[0].key.data(), it->second[0].key.size());
         kvssd::Slice put_val(it->second[0].value.data(), it->second[0].value.size());
 
@@ -429,6 +425,11 @@ void DBImpl::flush_sync_queue() {
         kvd_->kv_store(&put_key, &put_val);
         int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(it->second[0].key.data(), it->second[0].key.size(), 0)%options_.indexNum;
         key_idx_[idx_id]->Put(it->second[0].key);
+
+        if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
+          Slice key(it->second[0].key);
+          InsertEntryBloomFilter(key);
+        }
       } else { // pack the rest
         kvssd::Slice pack_key;
         kvssd::Slice pack_val;
@@ -517,10 +518,6 @@ Status DBImpl::Put(const WriteOptions& options,
         if (sq_entries >= SYNC_Q_FLUSH_THRES) { // 1, packID mono increase; 2, same thread context on same packID; 3, flush the smallest entry (group)
           auto head = sq_[sq_shard_id].begin();
           if (head->second.size() == 1) { // no packing
-            if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
-              Slice key(head->second[0].key);
-              InsertEntryBloomFilter(key);
-            }
             kvssd::Slice put_key(head->second[0].key.data(), head->second[0].key.size());
             kvssd::Slice put_val(head->second[0].value.data(), head->second[0].value.size());
 
@@ -528,6 +525,11 @@ Status DBImpl::Put(const WriteOptions& options,
             kvd_->kv_store(&put_key, &put_val);
             int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(head->second[0].key.data(), head->second[0].key.size(), 0)%options_.indexNum;
             key_idx_[idx_id]->Put(head->second[0].key);
+
+            if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
+              Slice key(head->second[0].key);
+              InsertEntryBloomFilter(key);
+            }
           } else {
             kvssd::Slice pack_key;
             kvssd::Slice pack_val;
@@ -643,10 +645,6 @@ Status DBImpl::Put(const WriteOptions& options,
       kvssd::Slice put_key(key.data(), key.size());
       kvssd::Slice put_val(value.data(), value.size());
 
-      if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
-        InsertEntryBloomFilter(key);
-      }
-
       // sync write 1-data, 2-index
       // Monitor mon;
       // kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
@@ -660,6 +658,10 @@ Status DBImpl::Put(const WriteOptions& options,
       kvd_->kv_store(&put_key, &put_val);
       int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
       key_idx_[idx_id]->Put(key);
+
+      if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
+        InsertEntryBloomFilter(key);
+      }
     }
   }
 
@@ -679,6 +681,10 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 	kvd_->kv_delete(&del_key);
   int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
   key_idx_[idx_id]->Delete(key);
+
+  if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
+    DeleteEntryBloomFilter(key);
+  }
   return Status();
 }
 
@@ -1345,7 +1351,7 @@ void DBImpl::ManualCompaction() {
 
 void DBImpl::BuildBloomFilter() {
   bf_.clear();
-  BloomFilter bf(options_.bfBitsPerKey);
+  CounterBloomFilter bf(options_.bfBitsPerKey, 3);
   int key_cnt = 0;
   std::vector<Slice> tmp_keys;
   for (auto it = hot_keys_.begin(); it != hot_keys_.end(); ++it) {
@@ -1360,7 +1366,7 @@ void DBImpl::BuildBloomFilter() {
 
 void DBImpl::CreateEmtpyBloomFilter(int key_cnt) {
   bf_.clear();
-  BloomFilter bf(options_.bfBitsPerKey);
+  CounterBloomFilter bf(options_.bfBitsPerKey, 3);
   
   bf.CreateEmptyFilter(key_cnt, &bf_);
   printf("Empty Bloom Filter created, %d keys, %d bytes\n", key_cnt, bf_.size());
@@ -1369,10 +1375,20 @@ void DBImpl::CreateEmtpyBloomFilter(int key_cnt) {
 void DBImpl::InsertEntryBloomFilter(const Slice& key) {
   // uint64_t ino = be64toh(*((uint64_t*)key.data())) >> 8;
   // fprintf(stderr, "BF insert :%llu,  %s\n", ino, key.data()+sizeof(uint64_t));
-  BloomFilter bf(options_.bfBitsPerKey);
+  CounterBloomFilter bf(options_.bfBitsPerKey, 3);
   {
     std::unique_lock<std::mutex> lock(hk_mutex_);
     bf.InsertEntry(key, &bf_);
+  }
+}
+
+void DBImpl::DeleteEntryBloomFilter(const Slice& key) {
+  // uint64_t ino = be64toh(*((uint64_t*)key.data())) >> 8;
+  // fprintf(stderr, "BF insert :%llu,  %s\n", ino, key.data()+sizeof(uint64_t));
+  CounterBloomFilter bf(options_.bfBitsPerKey, 3);
+  {
+    std::unique_lock<std::mutex> lock(hk_mutex_);
+    bf.DeleteEntry(key, &bf_);
   }
 }
 
@@ -1380,7 +1396,7 @@ bool DBImpl::CheckBloomFilter(const Slice& key) {
   if (bf_.size()) {
     // uint64_t ino = be64toh(*((uint64_t*)key.data())) >> 8;
     // fprintf(stderr, "BF check :%llu,  %s\n", ino, key.data()+sizeof(uint64_t));
-    BloomFilter bf(options_.bfBitsPerKey);
+    CounterBloomFilter bf(options_.bfBitsPerKey, 3);
     return bf.KeyMayMatch(key, bf_);
   }
   else { // no filter

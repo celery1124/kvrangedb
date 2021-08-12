@@ -118,6 +118,181 @@ class BloomFilter {
   size_t k_;
 };
 
+class CounterBloomFilter {
+ public:
+  explicit CounterBloomFilter(int cells_per_key, int width) : cells_per_key_(cells_per_key), width_(width) {
+    // We intentionally round down to reduce probing cost a little bit
+    k_ = static_cast<size_t>(cells_per_key * 0.69);  // 0.69 =~ ln(2)
+    if (k_ < 1) k_ = 1;
+    if (k_ > 30) k_ = 30;
+  }
+  
+  void CreateEmptyFilter(int n, std::string* dst) const  {
+    // Compute bloom filter size (in both bits and bytes)
+    size_t cells = n * cells_per_key_;
+
+    // For small n, we can see a very high false positive rate.  Fix it
+    // by enforcing a minimum bloom filter length.
+    if (cells < 64) cells = 64;
+
+    size_t bytes = (cells + 7) / 8 * width_;
+
+    const size_t init_size = dst->size();
+    dst->resize(init_size + bytes, 0);
+    dst->push_back(static_cast<char>(k_));  // Remember # of probes in filter
+    
+  }
+
+  void InsertEntry(const Slice& key, std::string* dst) {
+    assert ((dst->size() - 1) % width_ == 0);
+    size_t bits = 8 * (dst->size() - 1);
+    size_t cells = bits / width_;
+    char* array = &(*dst)[0];
+
+    // Use double-hashing to generate a sequence of hash values.
+    // See analysis in [Kirsch,Mitzenmacher 2006].
+    uint64_t h = BloomHash(key);
+    const uint64_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+    bool carry = false;
+    
+    for (size_t j = 0; j < k_; j++) {
+      const uint64_t bitpos = h % cells;
+      for (size_t i = 0; i < width_; i++) {
+        size_t cell_byte_start = i*cells/8;
+        bool b1 = array[cell_byte_start + bitpos / 8] & (1 << (bitpos % 8));
+        bool c = ((carry != b1) != (i == 0));
+        carry = ((i == 0) && b1) || (carry && b1);
+        array[cell_byte_start + bitpos / 8] = c ? (array[cell_byte_start + bitpos / 8] | (1 << (bitpos % 8)))
+                                                : (array[cell_byte_start + bitpos / 8] & ~(1 << (bitpos % 8)));
+      }
+      
+      if (carry) {
+        for (size_t i = 0; i < width_; i++) {
+          size_t cell_byte_start = i*cells/8;
+          array[cell_byte_start + bitpos / 8] |= (1 << (bitpos % 8));
+        }
+      }
+      h += delta;
+    }
+  }
+
+  void DeleteEntry(const Slice& key, std::string* dst) {
+    assert ((dst->size() - 1) % width_ == 0);
+    size_t bits = 8 * (dst->size() - 1);
+    size_t cells = bits / width_;
+    char* array = &(*dst)[0];
+
+    // Use double-hashing to generate a sequence of hash values.
+    // See analysis in [Kirsch,Mitzenmacher 2006].
+    uint64_t h = BloomHash(key);
+    const uint64_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+    bool borrow = false;
+    
+    for (size_t j = 0; j < k_; j++) {
+      const uint64_t bitpos = h % cells;
+      for (size_t i = 0; i < width_; i++) {
+        size_t cell_byte_start = i*cells/8;
+        bool b1 = array[cell_byte_start + bitpos / 8] & (1 << (bitpos % 8));
+        bool c = ((borrow != b1) != (i == 0));
+        borrow = ((i == 0) && (!b1)) || (borrow && (!b1));
+        
+        array[cell_byte_start + bitpos / 8] = c ? (array[cell_byte_start + bitpos / 8] | (1 << (bitpos % 8)))
+                                                : (array[cell_byte_start + bitpos / 8] & ~(1 << (bitpos % 8)));
+      }
+      if (borrow) {
+        for (size_t i = 0; i < width_; i++) {
+          size_t cell_byte_start = i*cells/8;
+          array[cell_byte_start + bitpos / 8] &= ~(1 << (bitpos % 8));
+        }
+      }
+      h += delta;
+    }
+  }
+
+  void CreateFilter(const Slice* keys, int n, std::string* dst) const  {
+    // Compute bloom filter size (in both bits and bytes)
+    size_t cells = n * cells_per_key_;
+
+    // For small n, we can see a very high false positive rate.  Fix it
+    // by enforcing a minimum bloom filter length.
+    if (cells < 64) cells = 64;
+
+    size_t bytes = (cells + 7) / 8 * width_;
+    
+
+    const size_t init_size = dst->size();
+    dst->resize(init_size + bytes, 0);
+    dst->push_back(static_cast<char>(k_));  // Remember # of probes in filter
+    char* array = &(*dst)[init_size];
+    for (int t = 0; t < n; t++) {
+      // Use double-hashing to generate a sequence of hash values.
+      // See analysis in [Kirsch,Mitzenmacher 2006].
+      uint64_t h = BloomHash(keys[t]);
+      const uint64_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+      bool carry = false;
+      
+      for (size_t j = 0; j < k_; j++) {
+        const uint64_t bitpos = h % cells;
+        for (size_t i = 0; i < width_; i++) {
+          size_t cell_byte_start = i*cells/8;
+          bool b1 = array[cell_byte_start + bitpos / 8] & (1 << (bitpos % 8));
+          bool c = ((carry != b1) != (i == 0));
+          carry = ((i == 0) && b1) || (carry && b1);
+          array[cell_byte_start + bitpos / 8] = c ? (array[cell_byte_start + bitpos / 8] | (1 << (bitpos % 8)))
+                                                  : (array[cell_byte_start + bitpos / 8] & ~(1 << (bitpos % 8)));
+        }
+        
+        if (carry) {
+          for (size_t i = 0; i < width_; i++) {
+            size_t cell_byte_start = i*cells/8;
+            array[cell_byte_start + bitpos / 8] |= (1 << (bitpos % 8));
+          }
+        }
+        h += delta;
+      }
+    }
+  }
+
+  bool KeyMayMatch(const Slice& key, const Slice& bloom_filter) const  {
+    const size_t len = bloom_filter.size();
+    if (len < 2) return false;
+
+    const char* array = bloom_filter.data();
+    const size_t bits = (len - 1) * 8;
+    size_t cells = bits / width_;
+
+    // Use the encoded k so that we can read filters generated by
+    // bloom filters created using different parameters.
+    const size_t k = array[len - 1];
+    if (k > 30) {
+      // Reserved for potentially new encodings for short bloom filters.
+      // Consider it a match.
+      return true;
+    }
+
+    uint64_t h = BloomHash(key);
+    const uint64_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+    for (size_t j = 0; j < k; j++) {
+      const uint64_t bitpos = h % cells;
+      bool count = false;
+      for (size_t i = 0; i < width_; i++) {
+        size_t cell_byte_start = i*cells/8;
+        bool c = array[cell_byte_start + bitpos / 8] & (1 << (bitpos % 8));
+        count = (count != c);
+        if (count) break;
+      }
+      if (!count) return false;
+      h += delta;
+    }
+    return true;
+  }
+
+ private:
+  size_t cells_per_key_;
+  size_t width_;
+  size_t k_;
+};
+
 class RangeFilter {
  public:
   RangeFilter() {};
@@ -137,6 +312,7 @@ private:
 };
 
 const BloomFilter* NewBloomFilter(int bits_per_key);
+const CounterBloomFilter* NewCounterBloomFilter(int cells_per_key, int width);
 
 RangeFilter* NewHiBloomFilter(int bits_per_key, int bits_per_level, int levels, int exam_suffix_bits, int num_keys, int max_probes, Statistics *stats);
 RangeFilter* NewRBloomFilter(int bits_per_key, int max_probes_bits, int num_keys, Statistics *stats);
