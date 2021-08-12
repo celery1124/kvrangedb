@@ -421,15 +421,15 @@ void DBImpl::flush_sync_queue() {
         kvssd::Slice put_key(it->second[0].key.data(), it->second[0].key.size());
         kvssd::Slice put_val(it->second[0].value.data(), it->second[0].value.size());
 
-        // sync write 1-data, 2-index
-        kvd_->kv_store(&put_key, &put_val);
-        int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(it->second[0].key.data(), it->second[0].key.size(), 0)%options_.indexNum;
-        key_idx_[idx_id]->Put(it->second[0].key);
-
         if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
           Slice key(it->second[0].key);
           InsertEntryBloomFilter(key);
         }
+
+        // sync write 1-data, 2-index
+        kvd_->kv_store(&put_key, &put_val);
+        int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(it->second[0].key.data(), it->second[0].key.size(), 0)%options_.indexNum;
+        key_idx_[idx_id]->Put(it->second[0].key);
       } else { // pack the rest
         kvssd::Slice pack_key;
         kvssd::Slice pack_val;
@@ -521,15 +521,15 @@ Status DBImpl::Put(const WriteOptions& options,
             kvssd::Slice put_key(head->second[0].key.data(), head->second[0].key.size());
             kvssd::Slice put_val(head->second[0].value.data(), head->second[0].value.size());
 
-            // sync write 1-data, 2-index
-            kvd_->kv_store(&put_key, &put_val);
-            int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(head->second[0].key.data(), head->second[0].key.size(), 0)%options_.indexNum;
-            key_idx_[idx_id]->Put(head->second[0].key);
-
             if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
               Slice key(head->second[0].key);
               InsertEntryBloomFilter(key);
             }
+
+            // sync write 1-data, 2-index
+            kvd_->kv_store(&put_key, &put_val);
+            int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(head->second[0].key.data(), head->second[0].key.size(), 0)%options_.indexNum;
+            key_idx_[idx_id]->Put(head->second[0].key);
           } else {
             kvssd::Slice pack_key;
             kvssd::Slice pack_val;
@@ -645,6 +645,10 @@ Status DBImpl::Put(const WriteOptions& options,
       kvssd::Slice put_key(key.data(), key.size());
       kvssd::Slice put_val(value.data(), value.size());
 
+      if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
+        InsertEntryBloomFilter(key);
+      }
+
       // sync write 1-data, 2-index
       // Monitor mon;
       // kvd_->kv_store_async(&put_key, &put_val, on_io_complete, &mon);
@@ -659,9 +663,6 @@ Status DBImpl::Put(const WriteOptions& options,
       int idx_id = (options_.indexNum == 1) ? 0 : MurmurHash64A(key.data(), key.size(), 0)%options_.indexNum;
       key_idx_[idx_id]->Put(key);
 
-      if (options_.bfHotKeyNum > 0) { // dynamic build hotkey filter
-        InsertEntryBloomFilter(key);
-      }
     }
   }
 
