@@ -139,9 +139,13 @@ struct Options {
   // Default: 1000000
   int hotKeyTrainingNum;
 
-  // Bits per key for bloom filter
+  // Cells per key for bloom filter (counting base)
   // Default: 8
-  int bfBitsPerKey;
+  int bfCellsPerKey;
+
+  // Cell width for bloom filter (counting base)
+  // Default: 3
+  int bfCellWidth;
 
   // Number of hot keys (bloom filter entries)
   // Default: 0 (no bloom filter for hotkey)
@@ -214,7 +218,8 @@ struct Options {
               bgCompactionInterval(10),
               bgCompactionScanLength(100000),
               hotKeyTrainingNum(1000000),
-              bfBitsPerKey(8),
+              bfCellsPerKey(8),
+              bfCellWidth(3),
               bfHotKeyNum(0),
               dataCacheSize(16),
               rfType(NoFilter),
