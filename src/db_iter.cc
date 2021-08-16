@@ -365,6 +365,7 @@ void DBIterator::prefetch_value_readahead(std::vector<Slice>& key_list, std::vec
   int prefetch_num = key_list.size();
   int async_get_num = 0;
   for (int i = 0; i < prefetch_num; i++) {
+    val_list.push_back(Slice());
     if (lkey_list[i].size() == 0)
       async_get_num++;
   }
@@ -401,11 +402,11 @@ void DBIterator::prefetch_value_readahead(std::vector<Slice>& key_list, std::vec
         char *lvalue = nullptr;
         int lvsize;
         do_unpack_KVs(vbuf, actual_vlen, lkey_s, lvalue, lvsize, readahead_cache_);
-        val_list.push_back(Slice(lvalue, lvsize));
+        val_list[i] = Slice(lvalue, lvsize);
         free(vbuf);
       }
       else { // already in cache (packed record read in single shot)
-        val_list.push_back(readahead_cache_[lkey]);
+        val_list[i] = readahead_cache_[lkey];
       }
     } 
   }
@@ -416,7 +417,7 @@ void DBIterator::prefetch_value_readahead(std::vector<Slice>& key_list, std::vec
   
     for (int i = 0; i < prefetch_num; i++) {
       if (lkey_list[i].size() == 0)
-        val_list.push_back(Slice(vbuf_list[i], actual_vlen_list[i]));
+        val_list[i] = Slice(vbuf_list[i], actual_vlen_list[i]);
     }
   }
 
