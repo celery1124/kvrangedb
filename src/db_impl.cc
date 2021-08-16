@@ -935,9 +935,29 @@ Status DBImpl::Get(const ReadOptions& options,
     return Status().NotFound(Slice());
   }
   if(pkey.size() == 0) { // not possible, since filter miss or logical key already checked
-    uint64_t ino = be64toh(*((uint64_t*)key.data())) >> 8;
-    fprintf(stderr, "[kv_get] default hint, cold key not packed, log_key: %llu, %s\n", ino, key.data()+sizeof(uint64_t));
-    return Status().NotFound(Slice());
+    // uint64_t ino = be64toh(*((uint64_t*)key.data())) >> 8;
+    // fprintf(stderr, "[kv_get] default hint, filter_found: %d, cold key not packed, log_key: %llu, %s\n",hotkey_found, ino, key.data()+sizeof(uint64_t));
+    /***** corner case we might need to check again *****/
+    kvssd::Slice get_key(key.data(), key.size());
+    char *vbuf;
+    int vlen;
+    int ret = kvd_->kv_get(&get_key, vbuf, vlen);
+    
+    if (ret == 0) {
+      value->append(vbuf, vlen);
+      free(vbuf);
+
+      // insert to in-memory cache
+      const Slice val(value->data(), value->size());
+      h = insert_cache(skey, val);
+      release_cache(h);
+      return Status();
+    }
+    else { // possible filter false positive
+      free(vbuf);
+      return Status().NotFound(Slice());
+    }
+
   } else { // read packed physical record
     kvssd::Slice get_key(pkey);
 
@@ -1352,7 +1372,7 @@ void DBImpl::ManualCompaction() {
 
 void DBImpl::BuildBloomFilter() {
   bf_.clear();
-  CounterBloomFilter bf(options_.bfBitsPerKey, 3);
+  CounterBloomFilter bf(options_.bfCellsPerKey, options_.bfCellWidth);
   int key_cnt = 0;
   std::vector<Slice> tmp_keys;
   for (auto it = hot_keys_.begin(); it != hot_keys_.end(); ++it) {
@@ -1367,7 +1387,7 @@ void DBImpl::BuildBloomFilter() {
 
 void DBImpl::CreateEmtpyBloomFilter(int key_cnt) {
   bf_.clear();
-  CounterBloomFilter bf(options_.bfBitsPerKey, 3);
+  CounterBloomFilter bf(options_.bfCellsPerKey, options_.bfCellWidth);
   
   bf.CreateEmptyFilter(key_cnt, &bf_);
   printf("Empty Bloom Filter created, %d keys, %d bytes\n", key_cnt, bf_.size());
@@ -1376,7 +1396,7 @@ void DBImpl::CreateEmtpyBloomFilter(int key_cnt) {
 void DBImpl::InsertEntryBloomFilter(const Slice& key) {
   // uint64_t ino = be64toh(*((uint64_t*)key.data())) >> 8;
   // fprintf(stderr, "BF insert :%llu,  %s\n", ino, key.data()+sizeof(uint64_t));
-  CounterBloomFilter bf(options_.bfBitsPerKey, 3);
+  CounterBloomFilter bf(options_.bfCellsPerKey, options_.bfCellWidth);
   {
     std::unique_lock<std::mutex> lock(hk_mutex_);
     bf.InsertEntry(key, &bf_);
@@ -1386,7 +1406,7 @@ void DBImpl::InsertEntryBloomFilter(const Slice& key) {
 void DBImpl::DeleteEntryBloomFilter(const Slice& key) {
   // uint64_t ino = be64toh(*((uint64_t*)key.data())) >> 8;
   // fprintf(stderr, "BF insert :%llu,  %s\n", ino, key.data()+sizeof(uint64_t));
-  CounterBloomFilter bf(options_.bfBitsPerKey, 3);
+  CounterBloomFilter bf(options_.bfCellsPerKey, options_.bfCellWidth);
   {
     std::unique_lock<std::mutex> lock(hk_mutex_);
     bf.DeleteEntry(key, &bf_);
@@ -1397,7 +1417,7 @@ bool DBImpl::CheckBloomFilter(const Slice& key) {
   if (bf_.size()) {
     // uint64_t ino = be64toh(*((uint64_t*)key.data())) >> 8;
     // fprintf(stderr, "BF check :%llu,  %s\n", ino, key.data()+sizeof(uint64_t));
-    CounterBloomFilter bf(options_.bfBitsPerKey, 3);
+    CounterBloomFilter bf(options_.bfCellsPerKey, options_.bfCellWidth);
     return bf.KeyMayMatch(key, bf_);
   }
   else { // no filter
