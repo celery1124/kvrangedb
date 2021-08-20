@@ -625,9 +625,8 @@ Status DBImpl::Put(const WriteOptions& options,
       }
       return Status();
     }
-
-    // smaller values
-    if (value.size() < options_.packThres && (!options_.packThreadsDisable)) {
+    
+    if (value.size() < options_.packThres && (!options_.packThreadsDisable)) { // packed value
       int size = get_phyKV_size(key, value);
       // Monitor mon;
       // packKVEntry *item = new packKVEntry(size, key, value, &mon);
