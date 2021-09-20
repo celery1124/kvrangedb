@@ -163,16 +163,24 @@ KVIndexRocks::KVIndexRocks(const Options& db_options, kvssd::KVSSD* kvd, std::st
   options.write_buffer_size = 64 << 20;
   options.target_file_size_base = 64 * 1048576;
   options.max_bytes_for_level_base = 64 * 1048576;
+  //options.level0_slowdown_writes_trigger = 12;
+  //options.level0_stop_writes_trigger = 10;
 
   rocksdb::BlockBasedTableOptions table_options;
   // table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(14, false));
-  table_options.block_size = 16384;
-  //table_options.cache_index_and_filter_blocks = true;
+  table_options.block_size = db_options.indexBlockSize;
+  table_options.cache_index_and_filter_blocks = true;
+  table_options.pin_l0_filter_and_index_blocks_in_cache = true;
+  table_options.cache_index_and_filter_blocks_with_high_priority = true;
+
   if (db_options.indexCacheSize > 0)
     table_options.block_cache = rocksdb::NewLRUCache((size_t)db_options.indexCacheSize * 1024 * 1024LL);
   else {
     //table_options.block_cache = rocksdb::NewLRUCache(16384);
     table_options.no_block_cache = true; 
+    table_options.cache_index_and_filter_blocks = false;
+    table_options.pin_l0_filter_and_index_blocks_in_cache = false;
+    table_options.cache_index_and_filter_blocks_with_high_priority = false;
   }
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
@@ -183,7 +191,11 @@ KVIndexRocks::KVIndexRocks(const Options& db_options, kvssd::KVSSD* kvd, std::st
   options.env = rocksdb::NewKVEnvOpt(rocksdb::Env::Default(), kvd);
   rocksdb::Status status = rocksdb::DB::Open(options, name, &db_);
   if (status.ok()) printf("rocksdb open ok\n");
-  else printf("rocksdb open error\n");
+  else {
+    std::string status_str=status.ToString();
+    printf("rocksdb open error: %s\n", status_str.c_str());
+    exit(-1);
+  }
 
   write_options_.disableWAL = true;
 }
@@ -191,6 +203,7 @@ KVIndexRocks::KVIndexRocks(const Options& db_options, kvssd::KVSSD* kvd, std::st
 KVIndexRocks::~KVIndexRocks() {
   rocksdb::CancelAllBackgroundWork(db_, true);
   delete db_;
+  printf("rocksdb close\n");
   delete cmp_;
 }
 

@@ -67,6 +67,10 @@ struct Options {
   // Default: 1 (no partition)
   int indexNum;
 
+  // Rocks Index LSM-Tree block size
+  // Default: 4096
+  int indexBlockSize;
+
   // Index cache size in MB (currently only support LSM)
   // Default: 128MB
   int indexCacheSize;
@@ -199,6 +203,7 @@ struct Options {
               indexType(LSM),
               cleanIndex(false),
               indexNum(1),
+              indexBlockSize(4096),
               indexCacheSize(128),
               prefetchEnabled(false),
               prefetchDepth(64),
