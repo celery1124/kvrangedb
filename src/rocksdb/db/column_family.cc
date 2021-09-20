@@ -644,12 +644,12 @@ WriteStallCondition ColumnFamilyData::RecalculateWriteStallConditions(
     bool was_stopped = write_controller->IsStopped();
     bool needed_delay = write_controller->NeedsDelay();
 
-    // if (env_ != nullptr && env_->GetDevUtil() >=0.75) {
+    // if (env_ != nullptr && env_->GetDevUtil() >=0.85) {
     //   write_controller_token_ = write_controller->GetStopToken();
     //   write_stall_condition = WriteStallCondition::kStopped;
     // } else
-    if (env_ != nullptr && env_->GetDevUtil() >=0.75) {
-      fprintf(stderr, "kvssd util above 0.75 (%.3f), abort\n", env_->GetDevUtil());
+    if (env_ != nullptr && env_->GetDevUtil() >=0.85) {
+      fprintf(stderr, "kvssd util above 0.85 (%.3f), abort\n", env_->GetDevUtil());
       exit(-1);
     }
  
