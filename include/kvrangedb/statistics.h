@@ -39,6 +39,11 @@ enum Tickers : uint32_t {
   IO_GET_BYTES,
   IO_APP_BYTES,
   DEV_UTIL,
+  // Write buffer
+  WBUFFER_HIT,
+  WBUFFER_MISS,
+  WBUFFER_FILL,
+  WBUFFER_ERASE,
   // Cache
   CACHE_HIT,
   CACHE_MISS,
@@ -74,6 +79,10 @@ const std::vector<std::pair<Tickers, std::string>> TickersNameMap = {
     {IO_GET_BYTES, "io.get.bytes"},
     {IO_APP_BYTES, "io.append.bytes"},
     {DEV_UTIL, "dev.util"},
+    {WBUFFER_HIT, "write.buffer.hit"},
+    {WBUFFER_MISS, "write.buffer.miss"},
+    {WBUFFER_FILL, "write.buffer.fill"},
+    {WBUFFER_ERASE, "write.buffer.erase"},
     {CACHE_HIT, "cache.hit"},
     {CACHE_MISS, "cache.miss"},
     {CACHE_FILL, "cache.fill"},

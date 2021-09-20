@@ -114,13 +114,14 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
     printf("Background compaction thread disabled\n");
   }
 
+  // allocate write buffer (2 times size of packing queue)
+  write_buffer_ = NewFIFOCache((size_t)options_.packQueueDepth * 2 + 16, 4); // cap unit: entry
   // initialize in-memory data cache
   if (options.dataCacheSize > 0) {
-    cache_ = NewLRUCache((size_t)options.dataCacheSize << 20, 0);
+    cache_ = NewLRUCache((size_t)options.dataCacheSize << 20, -1);
   }
   else {
-    if (options.readonly) cache_ = nullptr;
-    else cache_ = NewLRUCache(16<<20, 16); // minimum in-memory cache (16MB) for write queue (get need to examine write Q before reaching device)
+    cache_ = nullptr;
   }
 
   // initialize range filter
@@ -203,6 +204,7 @@ DBImpl::~DBImpl() {
 
   // save meta (sequence number)
   save_meta();
+  delete write_buffer_;
   delete cache_;
 
   for (int i = 0; i < options_.indexNum; i++)
@@ -491,9 +493,15 @@ Status DBImpl::Put(const WriteOptions& options,
   std::string skey(key.data(), key.size());
 
   if (options.update && (value.size() >= options_.packThres || options_.packThreadsDisable)) {
-    erase_cache(skey);
+    erase_cache_entry(skey);
     Cache::Handle* h = insert_cache(skey, value);
-    release_cache(h);
+    release_cache_entry(h);
+    
+    // update to write buffer
+    erase_buffer_entry(skey);
+    Cache::Handle* bh = insert_buffer(skey, value);
+    release_buffer_entry(bh);
+
     kvssd::Slice put_key(key.data(), key.size());
     kvssd::Slice put_val(value.data(), value.size());
 
@@ -503,7 +511,11 @@ Status DBImpl::Put(const WriteOptions& options,
   else {
     // insert to in-memory cache
     Cache::Handle* h = insert_cache(skey, value);
-    release_cache(h);
+    release_cache_entry(h);
+
+    // insert to write buffer
+    Cache::Handle* bh = insert_buffer(skey, value);
+    release_buffer_entry(bh);
 
     // sync packing
     if (options.packID >=0) {
@@ -672,7 +684,8 @@ Status DBImpl::Put(const WriteOptions& options,
 Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
   // delete in-memory cache
   std::string skey(key.data(), key.size());
-  erase_cache(skey);
+  erase_cache_entry(skey);
+  erase_buffer_entry(skey);
 
   RecordTick(options_.statistics.get(), REQ_DEL);
   total_record_count_.fetch_sub(1, std::memory_order_relaxed);
@@ -758,7 +771,7 @@ Status DBImpl::Get(const ReadOptions& options,
   std::string skey(key.data(), key.size());
   Cache::Handle *h = read_cache(skey, value);
   if (h != NULL) { // hit in cache
-      release_cache(h);
+      release_cache_entry(h);
       return Status();
   }
 
@@ -784,6 +797,13 @@ Status DBImpl::Get(const ReadOptions& options,
       return Status().NotFound(Slice());
       
     } else { // packing with key translation
+      // check write buffer before reaching device if key exist
+      Cache::Handle *bh = read_buffer(skey, value);
+      if (bh != NULL) { // hit in write buffer
+          release_buffer_entry(bh);
+          return Status();
+      }
+
       kvssd::Slice get_key(pkey);
       char *vbuf;
       int vlen;
@@ -796,10 +816,17 @@ Status DBImpl::Get(const ReadOptions& options,
       // insert to in-memory cache
       const Slice val(value->data(), value->size());
       h = insert_cache(skey, val);
-      release_cache(h);
+      release_cache_entry(h);
       return Status();
     }
   } else if (options.hint_packed == UNPACKED) { // definitely unpacked records
+    // check write buffer before reaching device if key exist
+    Cache::Handle *bh = read_buffer(skey, value);
+    if (bh != NULL) { // hit in write buffer
+        release_buffer_entry(bh);
+        return Status();
+    }
+
     kvssd::Slice get_key(key.data(), key.size());
     char *vbuf;
     int vlen;
@@ -810,7 +837,7 @@ Status DBImpl::Get(const ReadOptions& options,
       // insert to in-memory cache
       const Slice val(value->data(), value->size());
       h = insert_cache(skey, val);
-      release_cache(h);
+      release_cache_entry(h);
       return Status();
     }
     else {
@@ -825,7 +852,14 @@ Status DBImpl::Get(const ReadOptions& options,
     if (!idx_found) { // definitely not found
       return Status().NotFound(Slice());
     }
-    else if (pkey.size() == 0) { // not packing
+
+    // check write buffer before reaching device if key exist
+    Cache::Handle *bh = read_buffer(skey, value);
+    if (bh != NULL) { // hit in write buffer
+        release_buffer_entry(bh);
+        return Status();
+    }
+    if (pkey.size() == 0) { // not packing
       kvssd::Slice get_key(key.data(), key.size());
       char *vbuf;
       int vlen;
@@ -836,7 +870,7 @@ Status DBImpl::Get(const ReadOptions& options,
         // insert to in-memory cache
         const Slice val(value->data(), value->size());
         h = insert_cache(skey, val);
-        release_cache(h);
+        release_cache_entry(h);
         return Status();
       } else {
         free(vbuf);
@@ -856,10 +890,17 @@ Status DBImpl::Get(const ReadOptions& options,
       // insert to in-memory cache
       const Slice val(value->data(), value->size());
       h = insert_cache(skey, val);
-      release_cache(h);
+      release_cache_entry(h);
       return Status();
     }
   } else if (options.hint_packed == LIKELY_UNPACKED) { // likely unpacked records
+    // check write buffer before reaching device if key exist
+    Cache::Handle *bh = read_buffer(skey, value);
+    if (bh != NULL) { // hit in write buffer
+        release_buffer_entry(bh);
+        return Status();
+    }
+
     kvssd::Slice get_key(key.data(), key.size());
     char *vbuf;
     int vlen;
@@ -870,7 +911,7 @@ Status DBImpl::Get(const ReadOptions& options,
       // insert to in-memory cache
       const Slice val(value->data(), value->size());
       h = insert_cache(skey, val);
-      release_cache(h);
+      release_cache_entry(h);
       return Status();
     }
     else {
@@ -895,7 +936,7 @@ Status DBImpl::Get(const ReadOptions& options,
         // insert to in-memory cache
         const Slice val(value->data(), value->size());
         h = insert_cache(skey, val);
-        release_cache(h);
+        release_cache_entry(h);
         return Status();
       }
     }
@@ -905,6 +946,13 @@ Status DBImpl::Get(const ReadOptions& options,
   // bloom filter check for hot key
   bool hotkey_found = CheckBloomFilter(key);
   if(hotkey_found) { // filter hit, highly possible hot key
+    // check write buffer before reaching device if key exist
+    Cache::Handle *bh = read_buffer(skey, value);
+    if (bh != NULL) { // hit in write buffer
+        release_buffer_entry(bh);
+        return Status();
+    }
+
     kvssd::Slice get_key(key.data(), key.size());
     char *vbuf;
     int vlen;
@@ -917,7 +965,7 @@ Status DBImpl::Get(const ReadOptions& options,
       // insert to in-memory cache
       const Slice val(value->data(), value->size());
       h = insert_cache(skey, val);
-      release_cache(h);
+      release_cache_entry(h);
       return Status();
     }
     else { // possible filter false positive
@@ -933,6 +981,13 @@ Status DBImpl::Get(const ReadOptions& options,
   if (!idx_found) { // definitely not found
     return Status().NotFound(Slice());
   }
+  // check write buffer before reaching device if key exist
+  Cache::Handle *bh = read_buffer(skey, value);
+  if (bh != NULL) { // hit in write buffer
+      release_buffer_entry(bh);
+      return Status();
+  }
+
   if(pkey.size() == 0) { // not possible, since filter miss or logical key already checked
     // uint64_t ino = be64toh(*((uint64_t*)key.data())) >> 8;
     // fprintf(stderr, "[kv_get] default hint, filter_found: %d, cold key not packed, log_key: %llu, %s\n",hotkey_found, ino, key.data()+sizeof(uint64_t));
@@ -949,7 +1004,7 @@ Status DBImpl::Get(const ReadOptions& options,
       // insert to in-memory cache
       const Slice val(value->data(), value->size());
       h = insert_cache(skey, val);
-      release_cache(h);
+      release_cache_entry(h);
       return Status();
     }
     else { // possible filter false positive
@@ -971,7 +1026,7 @@ Status DBImpl::Get(const ReadOptions& options,
     // insert to in-memory cache
     const Slice val(value->data(), value->size());
     h = insert_cache(skey, val);
-    release_cache(h);
+    release_cache_entry(h);
     return Status();
   }
   // not reachable

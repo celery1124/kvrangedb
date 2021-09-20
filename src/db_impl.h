@@ -136,6 +136,8 @@ private:
   std::atomic<int> hot_keys_training_cnt_;
   std::string bf_;
 
+  // in-memory write buffer
+  Cache *write_buffer_;
   // in-memory cache
   Cache *cache_;
 
@@ -241,6 +243,38 @@ private:
   void DoBGCompact(std::vector<std::string>* klist, int offset, int size);
   void BuildRangeFilter();
 
+  // in-memory write buffer interface
+  Cache::Handle* read_buffer(std::string& key, std::string* value) {
+      if (write_buffer_==NULL) return NULL;
+      Cache::Handle *h = write_buffer_->Lookup(key);
+      if (h != NULL) {
+          CacheEntry *rd_val = reinterpret_cast<CacheEntry*>(write_buffer_->Value(h));
+          value->append(rd_val->val, rd_val->size);
+          RecordTick(options_.statistics.get(), WBUFFER_HIT);
+      }
+      else 
+          RecordTick(options_.statistics.get(), WBUFFER_MISS);
+      return h;
+  };
+  Cache::Handle* insert_buffer(std::string& key, const Slice& value) {
+      if (write_buffer_==NULL) return NULL;
+      CacheEntry *ins_val = new CacheEntry((char *)value.data(), value.size());
+      size_t charge = 1;
+      Cache::Handle *h = write_buffer_->Insert(key, reinterpret_cast<void*>(ins_val), charge, DeleteEntry<CacheEntry>);
+      RecordTick(options_.statistics.get(), WBUFFER_FILL);
+      return h;
+  };
+  void erase_buffer_entry(std::string& key) {
+      if (write_buffer_==NULL) return ;
+      bool evicted = write_buffer_->Erase(key);
+
+      if (evicted) RecordTick(options_.statistics.get(), WBUFFER_ERASE);
+  };
+  void release_buffer_entry(Cache::Handle* h) {
+      if (write_buffer_==NULL) return ;
+      write_buffer_->Release(h);
+  };
+
   // in-memory cache interface
 	Cache::Handle* read_cache(std::string& key, std::string* value) {
         if (cache_==NULL) return NULL;
@@ -263,13 +297,13 @@ private:
         RecordTick(options_.statistics.get(), CACHE_FILL);
         return h;
     };
-    void erase_cache(std::string& key) {
+    void erase_cache_entry(std::string& key) {
         if (cache_==NULL) return ;
         bool evicted = cache_->Erase(key);
 
         if (evicted) RecordTick(options_.statistics.get(), CACHE_ERASE);
     };
-    void release_cache(Cache::Handle* h) {
+    void release_cache_entry(Cache::Handle* h) {
         if (cache_==NULL) return ;
         cache_->Release(h);
     };
