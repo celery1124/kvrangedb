@@ -4,6 +4,9 @@ This project aims at supporting range queries on KVSSD by storing a secondary or
 
 We compare with an in-house [WiscKey][wisckey repo] implementation on block SSD and [RocksKV][rockskv repo], a simple RocksDB porting to KVSSD.
 
+# Publication
+Mian Qin, Qing Zheng, Jason Lee, Bradley Settlemyer, Fei Wen, Narasimha Reddy, Paul Gratz, [KVRangeDB: Range Queries for A Hash-Based Key-Value Device](https://drive.google.com/file/d/1iDKdrF8HWRRjsbWnnm-QK2x9UMxddEoD/view?usp=share_link), ACM Transactions on Storage, Vol. 1, No. 1, article to appear Jan. 2023. [https://dl.acm.org/doi/10.1145/3582013](https://dl.acm.org/doi/10.1145/3582013)
+
 # Interface
 
 Provide a rocksdb like interface with:
